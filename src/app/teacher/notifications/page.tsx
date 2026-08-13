@@ -29,6 +29,7 @@ interface NotificationItem {
   link?: string | null;
   severity: 'CRITICAL' | 'WARNING' | 'INFO' | string;
   category: 'SUBMISSION' | 'COMMENT' | 'EXAM_ALERT' | 'SYSTEM_NOTICE' | string;
+  metadata?: string | null;
   isRead: boolean;
   createdAt: string;
 }
@@ -362,15 +363,29 @@ export default function TeacherNotificationsPage() {
                         })}
                       </span>
 
-                      {n.link && (
-                        <Link
-                          href={n.link}
-                          className="text-teal-400 hover:text-teal-300 font-semibold inline-flex items-center space-x-1"
-                        >
-                          <span>View Detail</span>
-                          <FontAwesomeIcon icon={faExternalLinkAlt} className="text-[9px]" />
-                        </Link>
-                      )}
+                      {(() => {
+                        // Derive deep-link: explicit link > metadata-based > none
+                        let deepLink = n.link;
+                        if (!deepLink && n.metadata) {
+                          try {
+                            const meta = JSON.parse(n.metadata);
+                            if ((n.category === 'COMMENT' || n.category === 'REPLY') && meta.courseId) {
+                              deepLink = `/teacher/classrooms/${meta.courseId}?tab=stream&postId=${meta.postId || ''}`;
+                            } else if (n.category === 'SUBMISSION' && meta.courseId) {
+                              deepLink = `/teacher/classrooms/${meta.courseId}?tab=classwork`;
+                            }
+                          } catch { /* ignore parse errors */ }
+                        }
+                        return deepLink ? (
+                          <Link
+                            href={deepLink}
+                            className="text-teal-400 hover:text-teal-300 font-semibold inline-flex items-center space-x-1"
+                          >
+                            <span>View in Classroom</span>
+                            <FontAwesomeIcon icon={faExternalLinkAlt} className="text-[9px]" />
+                          </Link>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 </div>

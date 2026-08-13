@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/config/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -107,6 +107,7 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
   const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'materials' | 'people' | 'grades'>('stream');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [highlightPostId, setHighlightPostId] = useState<string | null>(null);
 
   // Modals state
   const [showRichComposer, setShowRichComposer] = useState(false);
@@ -122,7 +123,40 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
 
   const { user } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isTeacherOrAdmin = user?.role === 'ADMIN' || user?.role === 'TEACHER';
+
+  // Deep-link: read tab & postId from URL query params (e.g. ?tab=stream&postId=abc)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['stream', 'classwork', 'materials', 'people', 'grades'].includes(tabParam)) {
+      setActiveTab(tabParam as typeof activeTab);
+    }
+    const postIdParam = searchParams.get('postId');
+    if (postIdParam) {
+      setHighlightPostId(postIdParam);
+    }
+  }, [searchParams]);
+
+  // Deep-link: scroll to highlighted post once course data is loaded
+  useEffect(() => {
+    if (highlightPostId && course && activeTab === 'stream') {
+      // Small delay to allow DOM render
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`stream-post-${highlightPostId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-teal-400/60');
+          // Remove highlight after 4s
+          setTimeout(() => {
+            el.classList.remove('ring-2', 'ring-teal-400/60');
+            setHighlightPostId(null);
+          }, 4000);
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightPostId, course, activeTab]);
 
   const fetchCourse = useCallback(async () => {
     try {
@@ -439,7 +473,12 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
                 return (
                   <div
                     key={post.id}
-                    className="glass-panel p-6 rounded-3xl border border-slate-800/90 space-y-5 shadow-xl hover:border-slate-700/80 transition-all"
+                    id={`stream-post-${post.id}`}
+                    className={`glass-panel p-6 rounded-3xl border space-y-5 shadow-xl transition-all ${
+                      highlightPostId === post.id
+                        ? 'border-teal-400/60 ring-2 ring-teal-400/40 bg-teal-950/10'
+                        : 'border-slate-800/90 hover:border-slate-700/80'
+                    }`}
                   >
                     {/* Post Header */}
                     <div className="flex items-center justify-between">

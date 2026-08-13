@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import React, { useState } from 'react';
@@ -40,6 +41,35 @@ export interface CommentItem {
 }
 
 export type CommentData = CommentItem;
+
+interface RawCommentAuthor {
+  id?: string;
+  fullName?: string;
+  name?: string;
+  profilePicUrl?: string;
+  avatarUrl?: string;
+  role?: string;
+}
+
+interface RawCommentItem {
+  id: string;
+  body: string;
+  createdAt: string;
+  updatedAt?: string;
+  parentId?: string | null;
+  user?: RawCommentAuthor;
+  author?: RawCommentAuthor;
+  replies?: RawCommentItem[];
+}
+
+interface AuthUserWithDetails {
+  id?: string;
+  fullName?: string;
+  name?: string;
+  profilePicUrl?: string;
+  avatarUrl?: string;
+  role?: string;
+}
 
 interface StreamCommentsProps {
   postId: string;
@@ -86,6 +116,7 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
   onCommentAdded,
 }) => {
   const { user } = useAuthStore();
+  const authUser = user as AuthUserWithDetails | null;
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [collapsedReplies, setCollapsedReplies] = useState<Record<string, boolean>>({});
 
@@ -104,6 +135,52 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
     submitLabel: 'Post Comment',
     onSubmit: async () => {},
   });
+
+  const normalizedTree = React.useMemo(() => {
+    if (!comments || !Array.isArray(comments)) return [];
+
+    const map = new Map<string, CommentItem>();
+    const roots: CommentItem[] = [];
+
+    const normalizeUser = (c: RawCommentItem): CommentUser => {
+      const u = c.user || c.author || {};
+      return {
+        id: u.id || 'unknown',
+        name: u.name || u.fullName || 'User',
+        avatarUrl: u.avatarUrl || u.profilePicUrl,
+        role: u.role || 'STUDENT',
+      };
+    };
+
+    const mapItem = (c: RawCommentItem): CommentItem => ({
+      id: c.id,
+      body: c.body,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      parentId: c.parentId,
+      user: normalizeUser(c),
+      replies: c.replies ? c.replies.map((r) => mapItem(r)) : [],
+    });
+
+    (comments as unknown as RawCommentItem[]).forEach((c) => {
+      const item = mapItem(c);
+      map.set(c.id, item);
+    });
+
+    map.forEach((item) => {
+      if (item.parentId && map.has(item.parentId)) {
+        const parent = map.get(item.parentId)!;
+        if (!parent.replies) parent.replies = [];
+        if (!parent.replies.some((r) => r.id === item.id)) {
+          parent.replies.push(item);
+        }
+      } else if (!item.parentId) {
+        roots.push(item);
+      }
+    });
+
+    return roots;
+  }, [comments]);
 
   const handleRefresh = () => {
     if (onRefreshComments) onRefreshComments();
@@ -352,15 +429,15 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
       >
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0">
-            {(user as unknown as { avatarUrl?: string })?.avatarUrl ? (
+            {(authUser?.profilePicUrl || authUser?.avatarUrl) ? (
               <img
-                src={(user as unknown as { avatarUrl?: string }).avatarUrl}
-                alt={user?.name || 'User'}
+                src={authUser?.profilePicUrl || authUser?.avatarUrl}
+                alt={authUser?.fullName || authUser?.name || 'User'}
                 className="w-8 h-8 rounded-full border border-slate-700 object-cover"
               />
             ) : (
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white text-xs font-bold">
-                {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                {(authUser?.fullName || authUser?.name || 'U').charAt(0).toUpperCase()}
               </div>
             )}
           </div>
@@ -380,13 +457,13 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
       </div>
 
       {/* List of Comments */}
-      {comments.length === 0 ? (
+      {normalizedTree.length === 0 ? (
         <div className="text-center py-6 border border-dashed border-slate-800 rounded-xl bg-slate-900/30">
           <p className="text-xs text-slate-400">No comments yet. Start the conversation!</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {comments.map((comment) => renderSingleComment(comment))}
+          {normalizedTree.map((comment) => renderSingleComment(comment))}
         </div>
       )}
 

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBell,
@@ -12,6 +13,9 @@ import {
   faCheckDouble,
   faExternalLinkAlt,
   faTimes,
+  faComments,
+  faReply,
+  faTasks,
 } from '@fortawesome/free-solid-svg-icons';
 
 import { useAuthStore } from '@/store/useAuthStore';
@@ -23,8 +27,19 @@ interface NotificationItem {
   link?: string | null;
   severity: 'CRITICAL' | 'WARNING' | 'INFO' | string;
   category: string;
+  metadata?: string | null;
   isRead: boolean;
   createdAt: string;
+}
+
+/** Parse the JSON metadata string from a notification into a typed object. */
+function parseMetadata(raw?: string | null): Record<string, string> | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 export const HeaderBellNotificationDropdown: React.FC = () => {
@@ -33,12 +48,30 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [toastAlert, setToastAlert] = useState<NotificationItem | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { user } = useAuthStore();
+  const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
+  // Pre-load notification sound once on mount
+  useEffect(() => {
+    audioRef.current = new Audio('/sounds/notification_alert.wav');
+    audioRef.current.volume = 0.6;
+  }, []);
+
+  /** Play the notification alert sound (user-gesture gated browsers will silently fail). */
+  const playNotificationSound = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {
+        // Autoplay blocked by browser – ignored
+      });
+    }
+  }, []);
+
   // Fetch initial notifications
-  const fetchNotifications = React.useCallback(async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       const userQuery = user?.id ? `&userId=${user.id}` : '';
       const res = await fetch(`${API_URL}/notifications?limit=8${userQuery}`);
@@ -63,11 +96,14 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
         const parsed = JSON.parse(event.data);
         if (parsed.type === 'NOTIFICATION' && parsed.payload) {
           const newNotif: NotificationItem = parsed.payload;
-          
+
           setNotifications((prev) => [newNotif, ...prev.slice(0, 15)]);
           setUnreadCount((prev) => prev + 1);
 
-          // Show Toast Popup for Critical / Warning notifications
+          // 🔔 Play notification sound
+          playNotificationSound();
+
+          // Show Toast Popup
           setToastAlert(newNotif);
           setTimeout(() => setToastAlert(null), 5000);
         }
@@ -83,7 +119,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
     return () => {
       eventSource.close();
     };
-  }, [API_URL, fetchNotifications]);
+  }, [API_URL, fetchNotifications, playNotificationSound]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -115,6 +151,67 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
       setUnreadCount(0);
     } catch (err) {
       console.error('Failed to mark all as read:', err);
+    }
+  };
+
+  /**
+   * Deep-link navigation: resolve a notification to its target page.
+   * For COMMENT / REPLY categories the metadata contains courseId + postId;
+   * we navigate to the classroom page with query params so the stream tab
+   * opens and scrolls to the relevant post.
+   */
+  const navigateToNotification = (n: NotificationItem) => {
+    // Mark read first
+    if (!n.isRead) handleMarkAsRead(n.id);
+    setIsOpen(false);
+
+    // If the notification already carries an explicit link, use that
+    if (n.link) {
+      router.push(n.link);
+      return;
+    }
+
+    // Derive a deep-link from metadata
+    const meta = parseMetadata(n.metadata);
+    if (!meta) {
+      // Fallback: open the full notification center
+      router.push(user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications');
+      return;
+    }
+
+    const rolePrefix = user?.role === 'STUDENT' ? '/student' : '/teacher';
+
+    if (
+      (n.category === 'COMMENT' || n.category === 'REPLY') &&
+      meta.courseId
+    ) {
+      // Navigate to the classroom hub with the stream tab active and highlight the post
+      router.push(
+        `${rolePrefix}/classrooms/${meta.courseId}?tab=stream&postId=${meta.postId || ''}`,
+      );
+      return;
+    }
+
+    if (n.category === 'SUBMISSION' && meta.courseId) {
+      router.push(`${rolePrefix}/classrooms/${meta.courseId}?tab=classwork`);
+      return;
+    }
+
+    // Default fallback
+    router.push(user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications');
+  };
+
+  /** Return an icon appropriate for the notification category. */
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'COMMENT':
+        return faComments;
+      case 'REPLY':
+        return faReply;
+      case 'SUBMISSION':
+        return faTasks;
+      default:
+        return null;
     }
   };
 
@@ -174,7 +271,13 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
 
       {/* Floating Real-Time Toast Alert (Top-Right Popup) */}
       {toastAlert && (
-        <div className="fixed top-12 right-4 z-50 max-w-sm w-full bg-slate-900/95 border border-rose-500/50 rounded-xl p-3.5 shadow-2xl shadow-rose-950/50 backdrop-blur-md animate-bounce">
+        <div
+          onClick={() => {
+            navigateToNotification(toastAlert);
+            setToastAlert(null);
+          }}
+          className="fixed top-12 right-4 z-50 max-w-sm w-full bg-slate-900/95 border border-rose-500/50 rounded-xl p-3.5 shadow-2xl shadow-rose-950/50 backdrop-blur-md animate-bounce cursor-pointer"
+        >
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
@@ -183,7 +286,10 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
               </span>
             </div>
             <button
-              onClick={() => setToastAlert(null)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setToastAlert(null);
+              }}
               className="text-slate-400 hover:text-slate-200 text-xs"
             >
               <FontAwesomeIcon icon={faTimes} />
@@ -193,6 +299,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
           {toastAlert.body && (
             <p className="text-[11px] text-slate-300 mt-1 line-clamp-2">{toastAlert.body}</p>
           )}
+          <p className="text-[10px] text-teal-400 mt-1.5 font-medium">Click to open →</p>
         </div>
       )}
 
@@ -233,10 +340,11 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
             ) : (
               notifications.map((n) => {
                 const style = getSeverityStyle(n.severity);
+                const catIcon = getCategoryIcon(n.category);
                 return (
                   <div
                     key={n.id}
-                    onClick={() => !n.isRead && handleMarkAsRead(n.id)}
+                    onClick={() => navigateToNotification(n)}
                     className={`p-3 transition-colors cursor-pointer ${
                       n.isRead ? 'bg-slate-900/40 opacity-75' : 'bg-slate-800/40 hover:bg-slate-800/80'
                     }`}
@@ -249,6 +357,12 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
                         >
                           {n.severity}
                         </span>
+                        {catIcon && (
+                          <span className="text-[9px] text-slate-400 flex items-center space-x-1">
+                            <FontAwesomeIcon icon={catIcon} className="text-[9px]" />
+                            <span className="capitalize">{n.category.toLowerCase()}</span>
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-slate-500">
                         {new Date(n.createdAt).toLocaleTimeString([], {
@@ -265,6 +379,13 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
                     {n.body && (
                       <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2 leading-snug">
                         {n.body}
+                      </p>
+                    )}
+
+                    {/* Deep-link hint */}
+                    {(n.category === 'COMMENT' || n.category === 'REPLY' || n.category === 'SUBMISSION') && (
+                      <p className="text-[10px] text-teal-400/70 mt-1 font-medium">
+                        Click to view in classroom →
                       </p>
                     )}
                   </div>
