@@ -94,12 +94,8 @@ export const RichCommentComposerModal: React.FC<RichCommentComposerModalProps> =
 
     let finalBody = body.trim();
 
-    if (codeBlocks.length > 0) {
-      const codeBlocksMd = codeBlocks
-        .map((cb) => `\`\`\`${cb.language || 'text'}\n${cb.code}\n\`\`\``)
-        .join('\n\n');
-      finalBody = finalBody ? `${finalBody}\n\n${codeBlocksMd}` : codeBlocksMd;
-    }
+    // NOTE: Code blocks are already embedded as markdown fences within `body`
+    // by WordMarkdownEditor.syncCellsToParent(), so we do NOT re-append them here.
 
     if (attachments.length > 0) {
       const attsMd =
