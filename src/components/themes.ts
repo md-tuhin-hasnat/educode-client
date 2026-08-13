@@ -1,0 +1,343 @@
+import type { editor } from 'monaco-editor';
+
+export interface MonacoThemeDefinition {
+  id: string;
+  name: string;
+  type: 'dark' | 'light';
+  data: editor.IStandaloneThemeData;
+}
+
+export const PRESET_THEMES: MonacoThemeDefinition[] = [
+  {
+    id: 'educode-dark',
+    name: 'EduCode Dark (Default)',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'F8FAFC', background: '0F172A' },
+        { token: 'comment', foreground: '64748B', fontStyle: 'italic' },
+        { token: 'comment.doc', foreground: '94A3B8', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'C084FC', fontStyle: 'bold' },
+        { token: 'keyword.control', foreground: 'F472B6', fontStyle: 'bold' },
+        { token: 'keyword.directive', foreground: 'F472B6', fontStyle: 'bold' },
+        { token: 'string', foreground: '34D399' },
+        { token: 'string.escape', foreground: '38BDF8' },
+        { token: 'number', foreground: 'FBBF24' },
+        { token: 'type', foreground: '38BDF8', fontStyle: 'italic' },
+        { token: 'type.identifier', foreground: '2DD4BF' },
+        { token: 'class', foreground: '2DD4BF', fontStyle: 'bold' },
+        { token: 'interface', foreground: '2DD4BF', fontStyle: 'bold' },
+        { token: 'function', foreground: '60A5FA' },
+        { token: 'function.call', foreground: '60A5FA' },
+        { token: 'member', foreground: '818CF8' },
+        { token: 'variable', foreground: 'E2E8F0' },
+        { token: 'variable.parameter', foreground: 'FDBA74' },
+        { token: 'constant', foreground: 'FB7185' },
+        { token: 'delimiter', foreground: '94A3B8' },
+        { token: 'operator', foreground: 'A78BFA' },
+        { token: 'preprocessor', foreground: 'F472B6' },
+      ],
+      colors: {
+        'editor.background': '#0F172A',
+        'editor.foreground': '#F8FAFC',
+        'editor.lineHighlightBackground': '#1E293B80',
+        'editor.lineHighlightBorder': '#33415550',
+        'editor.selectionBackground': '#312E8190',
+        'editor.selectionHighlightBackground': '#1E1B4B80',
+        'editorCursor.foreground': '#C084FC',
+        'editorWhitespace.foreground': '#334155',
+        'editorLineNumber.foreground': '#475569',
+        'editorLineNumber.activeForeground': '#C084FC',
+        'editorIndentGuide.background': '#1E293B',
+        'editorIndentGuide.activeBackground': '#475569',
+        'editorGutter.background': '#0F172A',
+        'editorWidget.background': '#1E293B',
+        'editorWidget.border': '#334155',
+        'editorSuggestWidget.background': '#1E293B',
+        'editorSuggestWidget.border': '#334155',
+        'editorSuggestWidget.selectedBackground': '#334155',
+      },
+    },
+  },
+  {
+    id: 'educode-midnight',
+    name: 'EduCode Midnight Glass',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'F1F5F9', background: '090D16' },
+        { token: 'comment', foreground: '475569', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'E879F9', fontStyle: 'bold' },
+        { token: 'string', foreground: '6EE7B7' },
+        { token: 'number', foreground: 'FCD34D' },
+        { token: 'type', foreground: '7DD3FC', fontStyle: 'italic' },
+        { token: 'function', foreground: '93C5FD' },
+        { token: 'variable', foreground: 'F1F5F9' },
+        { token: 'constant', foreground: 'FDA4AF' },
+      ],
+      colors: {
+        'editor.background': '#090D16',
+        'editor.foreground': '#F1F5F9',
+        'editor.lineHighlightBackground': '#0F172A',
+        'editor.selectionBackground': '#4C1D9580',
+        'editorCursor.foreground': '#E879F9',
+        'editorLineNumber.foreground': '#334155',
+        'editorLineNumber.activeForeground': '#E879F9',
+        'editorWidget.background': '#0F172A',
+        'editorWidget.border': '#1E293B',
+      },
+    },
+  },
+  {
+    id: 'dracula',
+    name: 'Dracula Official',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'f8f8f2', background: '282a36' },
+        { token: 'comment', foreground: '6272a4', fontStyle: 'italic' },
+        { token: 'string', foreground: 'f1fa8c' },
+        { token: 'keyword', foreground: 'ff79c6', fontStyle: 'bold' },
+        { token: 'number', foreground: 'bd93f9' },
+        { token: 'type', foreground: '8be9fd', fontStyle: 'italic' },
+        { token: 'function', foreground: '50fa7b' },
+        { token: 'variable', foreground: 'f8f8f2' },
+        { token: 'identifier', foreground: '50fa7b' },
+      ],
+      colors: {
+        'editor.background': '#282a36',
+        'editor.foreground': '#f8f8f2',
+        'editor.lineHighlightBackground': '#44475a',
+        'editor.selectionBackground': '#44475a',
+        'editorCursor.foreground': '#aeafad',
+        'editorWhitespace.foreground': '#44475a',
+      },
+    },
+  },
+  {
+    id: 'one-dark-pro',
+    name: 'One Dark Pro',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'abb2bf', background: '282c34' },
+        { token: 'comment', foreground: '5c6370', fontStyle: 'italic' },
+        { token: 'string', foreground: '98c379' },
+        { token: 'keyword', foreground: 'c678dd', fontStyle: 'bold' },
+        { token: 'number', foreground: 'd19a66' },
+        { token: 'type', foreground: 'e5c07b' },
+        { token: 'function', foreground: '61afef' },
+        { token: 'variable', foreground: 'e06c75' },
+      ],
+      colors: {
+        'editor.background': '#282c34',
+        'editor.foreground': '#abb2bf',
+        'editor.lineHighlightBackground': '#2c313c',
+        'editor.selectionBackground': '#3e4451',
+        'editorCursor.foreground': '#528bff',
+      },
+    },
+  },
+  {
+    id: 'nord',
+    name: 'Nord Arctic',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'd8dee9', background: '2e3440' },
+        { token: 'comment', foreground: '616e88', fontStyle: 'italic' },
+        { token: 'string', foreground: 'a3be8c' },
+        { token: 'keyword', foreground: '81a1c1', fontStyle: 'bold' },
+        { token: 'number', foreground: 'b48ead' },
+        { token: 'type', foreground: '8fbcbb' },
+        { token: 'function', foreground: '88c0d0' },
+      ],
+      colors: {
+        'editor.background': '#2e3440',
+        'editor.foreground': '#d8dee9',
+        'editor.lineHighlightBackground': '#3b4252',
+        'editor.selectionBackground': '#434c5e',
+      },
+    },
+  },
+  {
+    id: 'tokyo-night',
+    name: 'Tokyo Night',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'a9b1d6', background: '1a1b26' },
+        { token: 'comment', foreground: '565f89', fontStyle: 'italic' },
+        { token: 'string', foreground: '9ece6a' },
+        { token: 'keyword', foreground: 'bb9af7', fontStyle: 'bold' },
+        { token: 'number', foreground: 'ff9e64' },
+        { token: 'type', foreground: '2ac3de' },
+        { token: 'function', foreground: '7aa2f7' },
+      ],
+      colors: {
+        'editor.background': '#1a1b26',
+        'editor.foreground': '#a9b1d6',
+        'editor.lineHighlightBackground': '#24283b',
+        'editor.selectionBackground': '#33467c',
+      },
+    },
+  },
+  {
+    id: 'monokai-pro',
+    name: 'Monokai Pro',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'fcfcfa', background: '2d2a2e' },
+        { token: 'comment', foreground: '727072', fontStyle: 'italic' },
+        { token: 'string', foreground: 'ffd866' },
+        { token: 'keyword', foreground: 'ff6188', fontStyle: 'bold' },
+        { token: 'number', foreground: 'ab9df2' },
+        { token: 'type', foreground: '78dce8' },
+        { token: 'function', foreground: 'a9dc76' },
+      ],
+      colors: {
+        'editor.background': '#2d2a2e',
+        'editor.foreground': '#fcfcfa',
+        'editor.lineHighlightBackground': '#3a373b',
+        'editor.selectionBackground': '#403e41',
+      },
+    },
+  },
+  {
+    id: 'synthwave-84',
+    name: 'SynthWave \'84',
+    type: 'dark',
+    data: {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'f0eff1', background: '262335' },
+        { token: 'comment', foreground: '614d85', fontStyle: 'italic' },
+        { token: 'string', foreground: 'ff8b39' },
+        { token: 'keyword', foreground: 'fede5d', fontStyle: 'bold' },
+        { token: 'number', foreground: 'f92aad' },
+        { token: 'type', foreground: 'fe4450' },
+        { token: 'function', foreground: '36f9f6' },
+      ],
+      colors: {
+        'editor.background': '#262335',
+        'editor.foreground': '#f0eff1',
+        'editor.lineHighlightBackground': '#34294f',
+        'editor.selectionBackground': '#44356f',
+      },
+    },
+  },
+];
+
+export function parseVSCodeThemeJSON(jsonString: string): { id: string; name: string; data: editor.IStandaloneThemeData } | null {
+  try {
+    const raw = JSON.parse(jsonString);
+    const name = raw.name || 'Custom Imported Theme';
+    const id = `custom-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
+
+    let base: 'vs' | 'vs-dark' | 'hc-black' = 'vs-dark';
+    if (raw.type === 'light') base = 'vs';
+    if (raw.type === 'hc' || raw.type === 'high-contrast') base = 'hc-black';
+
+    const rules: editor.ITokenThemeRule[] = [];
+
+    if (Array.isArray(raw.tokenColors)) {
+      for (const item of raw.tokenColors) {
+        if (!item.settings) continue;
+        const scopes = Array.isArray(item.scope) ? item.scope : (item.scope ? [item.scope] : ['']);
+        for (const scope of scopes) {
+          rules.push({
+            token: scope,
+            foreground: item.settings.foreground,
+            background: item.settings.background,
+            fontStyle: item.settings.fontStyle,
+          });
+        }
+      }
+    }
+
+    return {
+      id,
+      name,
+      data: {
+        base,
+        inherit: true,
+        rules,
+        colors: raw.colors || {},
+      },
+    };
+  } catch (err) {
+    console.error('Error parsing VS Code theme JSON:', err);
+    return null;
+  }
+}
+
+export function registerMonacoThemes(monaco: { editor?: { defineTheme: (id: string, data: editor.IStandaloneThemeData) => void } }) {
+  if (!monaco || !monaco.editor) return;
+
+  PRESET_THEMES.forEach((t) => {
+    try {
+      monaco.editor?.defineTheme(t.id, t.data);
+    } catch {
+      // theme might already be defined
+    }
+  });
+
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('educode_ide_settings');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.customThemes) {
+          Object.entries(parsed.customThemes as Record<string, { data?: editor.IStandaloneThemeData }>).forEach(
+            ([id, t]) => {
+              if (t?.data) {
+                try {
+                  monaco.editor?.defineTheme(id, t.data);
+                } catch {
+                  // ignore error
+                }
+              }
+            }
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load custom themes into Monaco:', err);
+    }
+  }
+}
+
+export function getActiveThemeId(): string {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('educode_ide_settings');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.theme) {
+          return parsed.theme;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return 'educode-dark';
+}
+
+

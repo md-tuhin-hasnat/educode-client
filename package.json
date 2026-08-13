@@ -1,26 +1,67 @@
 {
   "name": "educode-client",
   "version": "0.1.0",
+  "description": "EduCode Secure Automated Coding & Examination Platform",
+  "author": "EduCode Team <admin@educode.edu>",
+  "homepage": "https://educode.edu",
   "private": true,
+  "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "npm run copy-monaco && next dev",
+    "build": "npm run copy-monaco && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "copy-monaco": "mkdir -p public/monaco && cp -r node_modules/monaco-editor/min/vs public/monaco/",
+    "postinstall": "npm run copy-monaco",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "electron:dev": "npm run build:electron && concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "dist": "npm run build && npm run build:electron && electron-builder --config electron-builder.config.js"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-regular-svg-icons": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@fortawesome/react-fontawesome": "^3.5.0",
+    "@monaco-editor/react": "^4.7.0",
+    "axios": "^1.19.0",
+    "better-sqlite3": "^13.0.3",
+    "clsx": "^2.1.1",
+    "monaco-editor": "^0.56.0",
+    "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.35"
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.6.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "concurrently": "^10.0.4",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.35",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35"
+    "ts-jest": "^29.4.12",
+    "typescript": "^5",
+    "wait-on": "^9.1.0"
+  },
+  "optionalDependencies": {
+    "@types/node-pty": "npm:null@*",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
   }
 }

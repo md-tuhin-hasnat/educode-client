@@ -1,0 +1,116 @@
+Full Name,Role,Institutional ID,Email,Password,Department
+System Admin,admin,ADM-2026-001,admin.system@admin.university.edu,SuperAdmin2026!,Computer Science
+Dr. Robert Vance,teacher,EMP-2026-101,robert.vance@teacher.university.edu,FacultyPass2026!,Computer Science
+Dr. Elena Rostova,teacher,EMP-2026-102,elena.rostova@teacher.university.edu,FacultyPass2026!,Software Engineering
+Prof. Alan Turing,teacher,EMP-2026-103,alan.turing@teacher.university.edu,FacultyPass2026!,Computer Science
+Dr. Grace Hopper,teacher,EMP-2026-104,grace.hopper@teacher.university.edu,FacultyPass2026!,Software Engineering
+Dr. Richard Hamming,teacher,EMP-2026-105,richard.hamming@teacher.university.edu,FacultyPass2026!,Mathematics
+Prof. Claude Shannon,teacher,EMP-2026-106,claude.shannon@teacher.university.edu,FacultyPass2026!,Electrical Engineering
+Dr. Donald Knuth,teacher,EMP-2026-107,donald.knuth@teacher.university.edu,FacultyPass2026!,Computer Science
+Prof. Barbara Liskov,teacher,EMP-2026-108,barbara.liskov@teacher.university.edu,FacultyPass2026!,Software Engineering
+Dr. Leslie Lamport,teacher,EMP-2026-109,leslie.lamport@teacher.university.edu,FacultyPass2026!,Computer Science
+Prof. John von Neumann,teacher,EMP-2026-110,john.neumann@teacher.university.edu,FacultyPass2026!,Mathematics
+Sarah Connor,ta,TA-2026-201,sarah.connor@ta.university.edu,TAPass2026!,Computer Science
+John Connor,ta,TA-2026-202,john.connor@ta.university.edu,TAPass2026!,Computer Science
+Marcus Wright,ta,TA-2026-203,marcus.wright@ta.university.edu,TAPass2026!,Software Engineering
+Kyle Reese,ta,TA-2026-204,kyle.reese@ta.university.edu,TAPass2026!,Electrical Engineering
+Alexander Mercer,student,2026-CSE-001,alex.mercer@student.university.edu,,Computer Science
+Beatrix Kiddo,student,2026-CSE-002,beatrix.kiddo@student.university.edu,Pass12345!,Computer Science
+Charles Xavier,student,2026-CSE-003,,StudentPass2026!,Computer Science
+Diana Prince,student,2026-CSE-004,diana.prince@student.university.edu,,Computer Science
+Edward Elric,student,2026-CSE-005,edward.elric@student.university.edu,Alchemist2026!,Computer Science
+Fiona Gallagher,student,2026-CSE-006,,,Computer Science
+Gordon Freeman,student,2026-CSE-007,gordon.freeman@student.university.edu,,Computer Science
+Hal Jordan,student,2026-CSE-008,hal.jordan@student.university.edu,,Electrical Engineering
+Iris West,student,2026-CSE-009,,,Computer Science
+Jack Sparrow,student,2026-CSE-010,jack.sparrow@student.university.edu,,Computer Science
+Katherine Pierce,student,2026-CSE-011,katherine.pierce@student.university.edu,,Software Engineering
+Luke Skywalker,student,2026-CSE-012,luke.skywalker@student.university.edu,,Electrical Engineering
+Michael Corleone,student,2026-CSE-013,michael.corleone@student.university.edu,,Computer Science
+Nathan Drake,student,2026-CSE-014,nathan.drake@student.university.edu,,Software Engineering
+Oliver Queen,student,2026-CSE-015,oliver.queen@student.university.edu,,Electrical Engineering
+Peter Parker,student,2026-CSE-016,peter.parker@student.university.edu,SpiderWeb2026!,Computer Science
+Quinn Fabray,student,2026-CSE-017,,,Software Engineering
+Rachel Green,student,2026-CSE-018,rachel.green@student.university.edu,,Computer Science
+Steve Rogers,student,2026-CSE-019,steve.rogers@student.university.edu,Captain2026!,Computer Science
+Tony Stark,student,2026-CSE-020,tony.stark@student.university.edu,IronMan2026!,Electrical Engineering
+Uma Thurman,student,2026-CSE-021,uma.thurman@student.university.edu,,Computer Science
+Victor Von Doom,student,2026-CSE-022,victor.doom@student.university.edu,,Computer Science
+Wanda Maximoff,student,2026-CSE-023,wanda.maximoff@student.university.edu,,Mathematics
+Xander Harris,student,2026-CSE-024,xander.harris@student.university.edu,,Computer Science
+Yennefer Vengerberg,student,2026-CSE-025,yennefer.v@student.university.edu,,Software Engineering
+Zelda Hyrule,student,2026-CSE-026,zelda.hyrule@student.university.edu,,Software Engineering
+Arthur Pendragon,student,2026-CSE-027,arthur.pendragon@student.university.edu,,Computer Science
+Bruce Wayne,student,2026-CSE-028,bruce.wayne@student.university.edu,BatCave2026!,Computer Science
+Clark Kent,student,2026-CSE-029,clark.kent@student.university.edu,SuperMan2026!,Computer Science
+David Miller,student,2026-CSE-030,david.miller@student.university.edu,,Software Engineering
+Emma Watson,student,2026-CSE-031,emma.watson@student.university.edu,,Software Engineering
+Frank Castle,student,2026-CSE-032,frank.castle@student.university.edu,,Computer Science
+George Stacy,student,2026-CSE-033,george.stacy@student.university.edu,,Electrical Engineering
+Harry Potter,student,2026-CSE-034,harry.potter@student.university.edu,Gryffindor2026!,Computer Science
+Ian Malcolm,student,2026-CSE-035,ian.malcolm@student.university.edu,,Mathematics
+Jessica Jones,student,2026-CSE-036,jessica.jones@student.university.edu,,Computer Science
+Kevin Flynn,student,2026-CSE-037,kevin.flynn@student.university.edu,,Computer Science
+Laura Croft,student,2026-CSE-038,laura.croft@student.university.edu,,Software Engineering
+Matt Murdock,student,2026-CSE-039,matt.murdock@student.university.edu,,Computer Science
+Norman Osborn,student,2026-CSE-040,norman.osborn@student.university.edu,,Electrical Engineering
+Otto Octavius,student,2026-CSE-041,otto.octavius@student.university.edu,,Electrical Engineering
+Paul Atreides,student,2026-CSE-042,paul.atreides@student.university.edu,,Computer Science
+Quentin Tarantino,student,2026-CSE-043,quentin.tarantino@student.university.edu,,Software Engineering
+Riley Andersen,student,2026-CSE-044,riley.andersen@student.university.edu,,Computer Science
+Sam Wilson,student,2026-CSE-045,sam.wilson@student.university.edu,,Electrical Engineering
+Ted Lasso,student,2026-CSE-046,ted.lasso@student.university.edu,,Mathematics
+Ursula Buffay,student,2026-CSE-047,ursula.buffay@student.university.edu,,Computer Science
+Veronica Mars,student,2026-CSE-048,veronica.mars@student.university.edu,,Software Engineering
+Wade Wilson,student,2026-CSE-049,wade.wilson@student.university.edu,DeadPool2026!,Computer Science
+Xavier Renegade,student,2026-CSE-050,xavier.renegade@student.university.edu,,Computer Science
+Yuri Boyka,student,2026-CSE-051,yuri.boyka@student.university.edu,,Software Engineering
+Zoe Saldana,student,2026-CSE-052,zoe.saldana@student.university.edu,,Computer Science
+Adam Jensen,student,2026-CSE-053,adam.jensen@student.university.edu,,Electrical Engineering
+Barry Allen,student,2026-CSE-054,barry.allen@student.university.edu,SpeedForce2026!,Electrical Engineering
+Cisco Ramon,student,2026-CSE-055,cisco.ramon@student.university.edu,,Electrical Engineering
+Caitlin Snow,student,2026-CSE-056,caitlin.snow@student.university.edu,,Software Engineering
+Harrison Wells,student,2026-CSE-057,harrison.wells@student.university.edu,,Computer Science
+Joe West,student,2026-CSE-058,joe.west@student.university.edu,,Computer Science
+Iris West Allen,student,2026-CSE-059,iris.westallen@student.university.edu,,Computer Science
+Wally West,student,2026-CSE-060,wally.west@student.university.edu,,Electrical Engineering
+Felicity Smoak,student,2026-CSE-061,felicity.smoak@student.university.edu,,Software Engineering
+John Diggle,student,2026-CSE-062,john.diggle@student.university.edu,,Computer Science
+Roy Harper,student,2026-CSE-063,roy.harper@student.university.edu,,Computer Science
+Thea Queen,student,2026-CSE-064,thea.queen@student.university.edu,,Software Engineering
+Laurel Lance,student,2026-CSE-065,laurel.lance@student.university.edu,,Computer Science
+Sara Lance,student,2026-CSE-066,sara.lance@student.university.edu,,Software Engineering
+Ray Palmer,student,2026-CSE-067,ray.palmer@student.university.edu,,Electrical Engineering
+Martin Stein,student,2026-CSE-068,martin.stein@student.university.edu,,Electrical Engineering
+Jefferson Jackson,student,2026-CSE-069,jefferson.jackson@student.university.edu,,Electrical Engineering
+Rip Hunter,student,2026-CSE-070,rip.hunter@student.university.edu,,Computer Science
+Gideon AI,student,2026-CSE-071,gideon.ai@student.university.edu,,Software Engineering
+Leonard Snart,student,2026-CSE-072,leonard.snart@student.university.edu,,Computer Science
+Mick Rory,student,2026-CSE-073,mick.rory@student.university.edu,,Computer Science
+Kendra Saunders,student,2026-CSE-074,kendra.saunders@student.university.edu,,Mathematics
+Carter Hall,student,2026-CSE-075,carter.hall@student.university.edu,,Mathematics
+Nyssa al Ghul,student,2026-CSE-076,nyssa.alghul@student.university.edu,,Software Engineering
+Malcolm Merlyn,student,2026-CSE-077,malcolm.merlyn@student.university.edu,,Computer Science
+Damien Darhk,student,2026-CSE-078,damien.darhk@student.university.edu,,Computer Science
+Adrian Chase,student,2026-CSE-079,adrian.chase@student.university.edu,,Software Engineering
+Slade Wilson,student,2026-CSE-080,slade.wilson@student.university.edu,,Electrical Engineering
+Shado Lin,student,2026-CSE-081,shado.lin@student.university.edu,,Computer Science
+Yao Fei,student,2026-CSE-082,yao.fei@student.university.edu,,Computer Science
+Anatoly Knyazev,student,2026-CSE-083,anatoly.knyazev@student.university.edu,,Software Engineering
+Lyla Michaels,student,2026-CSE-084,lyla.michaels@student.university.edu,,Computer Science
+Amanda Waller,student,2026-CSE-085,amanda.waller@student.university.edu,,Computer Science
+Tatsu Yamashiro,student,2026-CSE-086,tatsu.yamashiro@student.university.edu,,Software Engineering
+Maseo Yamashiro,student,2026-CSE-087,maseo.yamashiro@student.university.edu,,Software Engineering
+Akio Yamashiro,student,2026-CSE-088,akio.yamashiro@student.university.edu,,Computer Science
+Tommy Merlyn,student,2026-CSE-089,tommy.merlyn@student.university.edu,,Computer Science
+Moira Queen,student,2026-CSE-090,moira.queen@student.university.edu,,Software Engineering
+Robert Queen,student,2026-CSE-091,robert.queen@student.university.edu,,Electrical Engineering
+Walter Steele,student,2026-CSE-092,walter.steele@student.university.edu,,Computer Science
+Quentin Lance,student,2026-CSE-093,quentin.lance@student.university.edu,,Computer Science
+Dinah Drake,student,2026-CSE-094,dinah.drake@student.university.edu,,Software Engineering
+Rene Ramirez,student,2026-CSE-095,rene.ramirez@student.university.edu,,Computer Science
+Curtis Holt,student,2026-CSE-096,curtis.holt@student.university.edu,,Electrical Engineering
+Evelyn Sharp,student,2026-CSE-097,evelyn.sharp@student.university.edu,,Software Engineering
+Rory Regan,student,2026-CSE-098,rory.regan@student.university.edu,,Computer Science
+Mia Smoak,student,2026-CSE-099,mia.smoak@student.university.edu,,Software Engineering
+William Clayton,student,2026-CSE-100,william.clayton@student.university.edu,,Software Engineering
