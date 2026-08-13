@@ -182,7 +182,7 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
     if (!courseId) return;
 
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
-    const socket: Socket = io(socketUrl, {
+    const socket: Socket = io(`${socketUrl}/stream`, {
       transports: ['websocket'],
     });
 
