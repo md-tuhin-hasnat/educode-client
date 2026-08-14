@@ -78,6 +78,7 @@ interface StreamCommentsProps {
   userRole?: string;
   onRefreshComments?: () => void;
   onCommentAdded?: () => void;
+  mentionableUsers?: { id: string; name: string; avatarUrl?: string; role?: string }[];
 }
 
 // User Role Badge Helper
@@ -114,6 +115,7 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
   comments,
   onRefreshComments,
   onCommentAdded,
+  mentionableUsers,
 }) => {
   const { user } = useAuthStore();
   const authUser = user as AuthUserWithDetails | null;
@@ -128,6 +130,8 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
     submitLabel: string;
     replyingToName?: string;
     initialBody?: string;
+    quotedText?: string;
+    quotedAuthor?: string;
     onSubmit: (body: string) => Promise<void>;
   }>({
     title: 'Add Stream Comment',
@@ -212,6 +216,8 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
       submitLabel: 'Post Reply',
       initialBody: '',
       replyingToName: comment.user.name,
+      quotedText: comment.body,
+      quotedAuthor: comment.user.name,
       onSubmit: async (body: string) => {
         await apiClient.post(`/stream/posts/${postId}/comments`, {
           body,
@@ -477,6 +483,9 @@ export const StreamComments: React.FC<StreamCommentsProps> = ({
         submitLabel={composerConfig.submitLabel}
         replyingToName={composerConfig.replyingToName}
         initialBody={composerConfig.initialBody}
+        quotedText={composerConfig.quotedText}
+        quotedAuthor={composerConfig.quotedAuthor}
+        mentionableUsers={mentionableUsers}
       />
     </div>
   );

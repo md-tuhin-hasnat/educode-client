@@ -73,7 +73,7 @@ export const TitleBar: React.FC = () => {
       <div className="flex items-center space-x-3 app-no-drag">
         {user && (
           <div className="flex items-center space-x-2 text-xs">
-            {(user.role === 'ADMIN' || user.role === 'TEACHER') && <HeaderBellNotificationDropdown />}
+            <HeaderBellNotificationDropdown />
             <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${getRoleBadgeColor()} flex items-center space-x-1`}>
               <FontAwesomeIcon icon={getRoleIcon()} className="text-[10px] mr-1" />
               {user.role}

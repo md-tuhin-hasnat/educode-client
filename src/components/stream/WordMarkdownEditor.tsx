@@ -42,6 +42,7 @@ export interface WordMarkdownEditorProps {
   minHeight?: string;
   isPostRunnable?: boolean;
   onRunCodePreview?: (code: string, lang: string, title: string) => void;
+  mentionableUsers?: { id: string; name: string; avatarUrl?: string; role?: string }[];
 }
 
 export interface EditorCell {
@@ -146,6 +147,7 @@ interface RichTextCellComponentProps {
   onFocus: (editableEl: HTMLDivElement) => void;
   onRemoveCell: (id: string) => void;
   canRemove: boolean;
+  mentionableUsers?: { id: string; name: string; avatarUrl?: string; role?: string }[];
 }
 
 const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
@@ -155,9 +157,139 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
   onFocus,
   onRemoveCell,
   canRemove,
+  mentionableUsers,
 }) => {
   const divRef = useRef<HTMLDivElement | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [mentionState, setMentionState] = useState<{
+    active: boolean;
+    query: string;
+    node: Node | null;
+    offset: number;
+    top: number;
+    left: number;
+    selectedIndex: number;
+  }>({ active: false, query: '', node: null, offset: 0, top: 0, left: 0, selectedIndex: 0 });
+
+  const filteredUsers = React.useMemo(() => {
+    if (!mentionState.active || !mentionableUsers) return [];
+    const q = mentionState.query.toLowerCase();
+    return mentionableUsers.filter(u => u.name.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q));
+  }, [mentionState.active, mentionState.query, mentionableUsers]);
+
+  const handleMentionSelect = (user: { id: string; name: string }) => {
+    if (!mentionState.node) return;
+    const range = document.createRange();
+    
+    // We matched /(?:^|\s)@([a-zA-Z0-9_]*)$/
+    // We just want to replace the `@...` part, which is length of query + 1
+    range.setStart(mentionState.node, mentionState.offset - mentionState.query.length - 1);
+    range.setEnd(mentionState.node, mentionState.offset);
+    range.deleteContents();
+
+    const span = document.createElement('span');
+    span.className = 'mention inline-flex items-center gap-1 bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded-md font-medium text-sm mx-1 align-baseline cursor-pointer hover:bg-teal-500/30 transition-colors';
+    span.contentEditable = 'false';
+    span.dataset.userId = user.id;
+    span.innerHTML = `@${user.name}`;
+
+    const space = document.createTextNode('\u00A0'); // nbsp
+    range.insertNode(space);
+    range.insertNode(span);
+
+    // move cursor after space
+    const newRange = document.createRange();
+    newRange.setStartAfter(space);
+    newRange.setEndAfter(space);
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+
+    setMentionState(prev => ({ ...prev, active: false }));
+    if (divRef.current) {
+      onTextChange(cell.id, divRef.current.innerHTML);
+    }
+  };
+
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    onTextChange(cell.id, e.currentTarget.innerHTML);
+    
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (range.startContainer.nodeType === Node.TEXT_NODE) {
+        const text = range.startContainer.textContent || '';
+        const offset = range.startOffset;
+        const textBeforeCursor = text.substring(0, offset);
+        
+        // Match @ followed by word characters at the end of text before cursor
+        const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+        
+        if (match) {
+          const rect = range.getBoundingClientRect();
+          const parentRect = divRef.current?.getBoundingClientRect();
+          
+          if (parentRect) {
+            setMentionState({
+              active: true,
+              query: match[1],
+              node: range.startContainer,
+              offset: offset,
+              top: rect.bottom - parentRect.top + 5,
+              left: rect.left - parentRect.left,
+              selectedIndex: 0
+            });
+          }
+        } else {
+          setMentionState(prev => ({ ...prev, active: false }));
+        }
+      } else {
+         setMentionState(prev => ({ ...prev, active: false }));
+      }
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (mentionState.active && filteredUsers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionState(prev => ({ ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, filteredUsers.length - 1) }));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionState(prev => ({ ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) }));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredUsers[mentionState.selectedIndex]) {
+          handleMentionSelect(filteredUsers[mentionState.selectedIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionState(prev => ({ ...prev, active: false }));
+      }
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    let pastedData = e.clipboardData.getData('text/html');
+    if (pastedData) {
+      // Basic sanitization to strip inline styles, classes, and meta/style tags
+      // This ensures pasted content from VS Code or other IDEs inherits our theme.
+      pastedData = pastedData.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+      pastedData = pastedData.replace(/<meta[^>]*>/gi, '');
+      pastedData = pastedData.replace(/\sstyle="[^"]*"/gi, '');
+      pastedData = pastedData.replace(/\sstyle='[^']*'/gi, '');
+      pastedData = pastedData.replace(/\sclass="[^"]*"/gi, '');
+      pastedData = pastedData.replace(/\sclass='[^']*'/gi, '');
+      
+      document.execCommand('insertHTML', false, pastedData);
+    } else {
+      const text = e.clipboardData.getData('text/plain');
+      document.execCommand('insertText', false, text);
+    }
+  };
 
   useEffect(() => {
     if (divRef.current && document.activeElement !== divRef.current) {
@@ -189,12 +321,16 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
           onFocus(e.currentTarget);
         }}
         onBlur={(e) => {
-          setIsFocused(false);
+          // Delay to allow click on dropdown to register
+          setTimeout(() => {
+            setIsFocused(false);
+            setMentionState(prev => ({ ...prev, active: false }));
+          }, 200);
           onTextChange(cell.id, e.currentTarget.innerHTML);
         }}
-        onInput={(e) => {
-          onTextChange(cell.id, e.currentTarget.innerHTML);
-        }}
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         style={{ minHeight: '60px', direction: 'ltr', textAlign: 'left' }}
         className="w-full bg-transparent text-slate-100 focus:outline-none leading-relaxed text-sm p-3 rounded-xl hover:bg-slate-900/40 focus:bg-slate-900/60 transition-colors font-sans outline-none text-left [&_*]:text-left [&_h1]:text-2xl [&_h1]:font-black [&_h1]:text-white [&_h1]:mt-4 [&_h1]:mb-2 [&_h1:first-child]:mt-0 [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-white [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-slate-100 [&_h3]:mt-2.5 [&_h3]:mb-1 [&_h3:first-child]:mt-0 [&_p]:text-left [&_p]:mt-0 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:my-2.5 [&_ul:first-child]:mt-0 [&_ul:last-child]:mb-0 [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:text-left [&_ol]:my-2.5 [&_ol:first-child]:mt-0 [&_ol:last-child]:mb-0 [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:text-left [&_li]:my-0.5 [&_li]:text-left [&_blockquote]:my-2.5 [&_blockquote:first-child]:mt-0 [&_blockquote:last-child]:mb-0 [&_blockquote]:border-l-4 [&_blockquote]:border-teal-500 [&_blockquote]:pl-3.5 [&_blockquote]:italic [&_blockquote]:text-slate-300 [&_blockquote]:text-left [&_table]:my-3 [&_table:first-child]:mt-0 [&_table:last-child]:mb-0 [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-slate-800 [&_th]:border [&_th]:border-slate-800 [&_th]:p-2 [&_th]:bg-slate-900 [&_th]:text-left [&_td]:border [&_td]:border-slate-800 [&_td]:p-2 [&_td]:text-left"
       />
@@ -209,6 +345,43 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
           >
             <FontAwesomeIcon icon={faTrash} className="text-xs" />
           </button>
+        </div>
+      )}
+
+      {/* Mention Dropdown Overlay */}
+      {mentionState.active && mentionableUsers && (
+        <div 
+          className="absolute z-50 bg-slate-900 border border-slate-700 shadow-2xl rounded-xl w-64 max-h-64 overflow-y-auto py-2 flex flex-col"
+          style={{ top: mentionState.top, left: Math.min(mentionState.left, divRef.current?.clientWidth ? divRef.current.clientWidth - 260 : mentionState.left) }}
+        >
+          <div className="px-3 pb-2 text-[10px] uppercase font-bold text-slate-500 tracking-wider border-b border-slate-800 mb-1">
+            Mention User
+          </div>
+          {filteredUsers.length === 0 ? (
+            <div className="px-4 py-3 text-xs text-slate-500 text-center">No users found</div>
+          ) : (
+            filteredUsers.map((user, idx) => (
+              <button
+                key={user.id}
+                type="button"
+                className={`w-full text-left px-3 py-2 flex items-center space-x-3 transition-colors ${idx === mentionState.selectedIndex ? 'bg-teal-500/20' : 'hover:bg-slate-800'}`}
+                onClick={() => handleMentionSelect(user)}
+                onMouseEnter={() => setMentionState(prev => ({ ...prev, selectedIndex: idx }))}
+              >
+                <div className="w-6 h-6 rounded-full bg-slate-700 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] font-bold text-white">{user.name.charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-slate-200 truncate">{user.name}</div>
+                  <div className="text-[10px] text-slate-500 capitalize">{user.role?.toLowerCase() || 'Member'}</div>
+                </div>
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -235,6 +408,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
   onCodeBlocksChange,
   placeholder = 'Type formatted text here...',
   onRunCodePreview,
+  mentionableUsers,
 }) => {
   const [cells, setCells] = useState<EditorCell[]>(() =>
     parseInitialContent(value, codeBlocks)
@@ -702,6 +876,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
                 }}
                 onRemoveCell={handleRemoveCell}
                 canRemove={cells.length > 1}
+                mentionableUsers={mentionableUsers}
               />
             ) : (
               /* Code Cell */

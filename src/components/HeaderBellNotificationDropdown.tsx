@@ -42,6 +42,12 @@ function parseMetadata(raw?: string | null): Record<string, string> | null {
   }
 }
 
+/** Strip HTML tags for clean text preview */
+function stripHtml(html?: string | null): string {
+  if (!html) return '';
+  return html.replace(/<[^>]*>?/gm, '');
+}
+
 export const HeaderBellNotificationDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -51,6 +57,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { user } = useAuthStore();
   const router = useRouter();
+  const [muteSound, setMuteSound] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -62,28 +69,39 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
 
   /** Play the notification alert sound (user-gesture gated browsers will silently fail). */
   const playNotificationSound = useCallback(() => {
-    if (audioRef.current) {
+    if (!muteSound && audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {
         // Autoplay blocked by browser – ignored
       });
     }
-  }, []);
+  }, [muteSound]);
 
   // Fetch initial notifications
   const fetchNotifications = useCallback(async () => {
     try {
       const userQuery = user?.id ? `&userId=${user.id}` : '';
-      const res = await fetch(`${API_URL}/notifications?limit=8${userQuery}`);
+      const [res, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/notifications?limit=8${userQuery}`),
+        user?.token ? fetch(`${API_URL}/notifications/settings`, { 
+          headers: { 'Authorization': `Bearer ${user.token}` } 
+        }) : Promise.resolve(null)
+      ]);
+      
       if (res.ok) {
         const json = await res.json();
         setNotifications(json.data || []);
         setUnreadCount(json.meta?.unreadCount || 0);
       }
+      
+      if (settingsRes && settingsRes.ok) {
+        const settingsJson = await settingsRes.json();
+        setMuteSound(settingsJson.data?.muteSound || false);
+      }
     } catch (err) {
       console.error('Error fetching notifications:', err);
     }
-  }, [API_URL, user?.id]);
+  }, [API_URL, user?.id, user?.token]);
 
   useEffect(() => {
     fetchNotifications();
@@ -175,7 +193,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
     const meta = parseMetadata(n.metadata);
     if (!meta) {
       // Fallback: open the full notification center
-      router.push(user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications');
+      router.push(user?.role === 'STUDENT' ? '/student/notifications' : user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications');
       return;
     }
 
@@ -198,7 +216,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
     }
 
     // Default fallback
-    router.push(user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications');
+    router.push(user?.role === 'STUDENT' ? '/student/notifications' : user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications');
   };
 
   /** Return an icon appropriate for the notification category. */
@@ -297,7 +315,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
           </div>
           <p className="text-xs font-semibold text-white mt-1">{toastAlert.title}</p>
           {toastAlert.body && (
-            <p className="text-[11px] text-slate-300 mt-1 line-clamp-2">{toastAlert.body}</p>
+            <p className="text-[11px] text-slate-300 mt-1 line-clamp-2">{stripHtml(toastAlert.body)}</p>
           )}
           <p className="text-[10px] text-teal-400 mt-1.5 font-medium">Click to open →</p>
         </div>
@@ -378,7 +396,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
 
                     {n.body && (
                       <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2 leading-snug">
-                        {n.body}
+                        {stripHtml(n.body)}
                       </p>
                     )}
 
@@ -397,7 +415,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
           {/* Footer Navigation Link */}
           <div className="p-2.5 bg-slate-950/80 border-t border-slate-800/80 text-center">
             <Link
-              href={user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications'}
+              href={user?.role === 'STUDENT' ? '/student/notifications' : user?.role === 'TEACHER' ? '/teacher/notifications' : '/admin/notifications'}
               onClick={() => setIsOpen(false)}
               className="text-xs text-brand-400 hover:text-brand-300 font-semibold inline-flex items-center space-x-1.5 transition-colors"
             >

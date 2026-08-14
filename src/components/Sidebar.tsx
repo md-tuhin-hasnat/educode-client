@@ -17,6 +17,7 @@ import {
   faCode,
   faSliders,
   faBell,
+  faClipboardList,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface NavItem {
@@ -46,15 +47,18 @@ export const Sidebar: React.FC = () => {
     navItems = [
       { label: 'My Classrooms', href: '/teacher/dashboard', icon: faChalkboardTeacher },
       { label: 'Notifications', href: '/teacher/notifications', icon: faBell },
-      { label: 'Create Task', href: '/teacher/tasks/new', icon: faPlusCircle },
+      { label: 'Tasks', href: '/teacher/tasks', icon: faClipboardList },
       { label: 'Submissions', href: '/teacher/submissions', icon: faTasks },
       { label: 'Plagiarism Detector', href: '/teacher/plagiarism', icon: faShieldAlt },
+      { label: 'Settings', href: '/teacher/settings', icon: faSliders },
     ];
   } else {
     // STUDENT
     navItems = [
       { label: 'My Classrooms', href: '/student/dashboard', icon: faGraduationCap },
+      { label: 'Notifications', href: '/student/notifications', icon: faBell },
       { label: 'Active Tasks & Exams', href: '/student/dashboard#tasks', icon: faCode },
+      { label: 'Settings', href: '/student/settings', icon: faSliders },
     ];
   }
 

@@ -38,7 +38,7 @@ export default function LoginPage() {
         password,
       });
 
-      const { user: userData, accessToken } = response.data;
+      const { user: userData, accessToken, refreshToken } = response.data;
       const normalizedRole = (userData.role || 'STUDENT').toUpperCase() as 'STUDENT' | 'TEACHER' | 'ADMIN';
       const session: UserSession = {
         id: userData.id,
@@ -46,6 +46,7 @@ export default function LoginPage() {
         name: userData.fullName || userData.name || email,
         role: normalizedRole,
         token: accessToken,
+        refreshToken: refreshToken,
         departmentId: userData.departmentId,
       };
 

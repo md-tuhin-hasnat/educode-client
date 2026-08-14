@@ -40,7 +40,7 @@ function stripHtml(html?: string | null): string {
   return html.replace(/<[^>]*>?/gm, '');
 }
 
-export default function TeacherNotificationsPage() {
+export default function StudentNotificationsPage() {
   const { user } = useAuthStore();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +66,7 @@ export default function TeacherNotificationsPage() {
         setNotifications(json.data || []);
       }
     } catch (err) {
-      console.error('Error fetching teacher notifications:', err);
+      console.error('Error fetching student notifications:', err);
     } finally {
       setLoading(false);
     }
@@ -192,7 +192,7 @@ export default function TeacherNotificationsPage() {
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-white tracking-tight">
-                Teacher Notification Center
+                Student Notification Center
               </h1>
               <p className="text-xs text-slate-400">
                 Real-time updates on student task submissions, classroom stream comments, and exam alerts.
@@ -379,9 +379,9 @@ export default function TeacherNotificationsPage() {
                           try {
                             const meta = JSON.parse(n.metadata);
                             if ((n.category === 'COMMENT' || n.category === 'REPLY' || n.category === 'POST') && meta.courseId) {
-                              deepLink = `/teacher/classrooms/${meta.courseId}?tab=stream&postId=${meta.postId || ''}`;
+                              deepLink = `/student/classrooms/${meta.courseId}?tab=stream&postId=${meta.postId || ''}`;
                             } else if (n.category === 'SUBMISSION' && meta.courseId) {
-                              deepLink = `/teacher/classrooms/${meta.courseId}?tab=classwork`;
+                              deepLink = `/student/classrooms/${meta.courseId}?tab=classwork`;
                             }
                           } catch { /* ignore parse errors */ }
                         }

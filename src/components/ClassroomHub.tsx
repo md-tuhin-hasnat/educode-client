@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiClient } from '@/config/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -96,6 +96,17 @@ interface CourseDetails {
     };
     section?: { name: string };
   }>;
+  assessments: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    type: string;
+    status: string;
+    startTime?: string;
+    durationMin?: number;
+    createdAt: string;
+    _count?: { participants: number };
+  }>;
 }
 
 interface ClassroomHubProps {
@@ -125,6 +136,23 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isTeacherOrAdmin = user?.role === 'ADMIN' || user?.role === 'TEACHER';
+
+  const mentionableUsers = useMemo(() => {
+    if (!course) return [];
+    const users = [];
+    if (course.teacher) {
+      users.push({ id: course.teacher.id, name: course.teacher.fullName, role: 'Teacher' });
+    }
+    if (course.ta) {
+      users.push({ id: course.ta.id, name: course.ta.fullName, role: 'TA' });
+    }
+    if (course.enrollments) {
+      course.enrollments.forEach((enr: { student: { id: string; fullName: string } }) => {
+        users.push({ id: enr.student.id, name: enr.student.fullName, role: 'Student' });
+      });
+    }
+    return users;
+  }, [course]);
 
   // Deep-link: read tab & postId from URL query params (e.g. ?tab=stream&postId=abc)
   useEffect(() => {
@@ -387,7 +415,16 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 text-white font-semibold text-xs shadow-lg shadow-brand-600/30 flex items-center space-x-2 transition-all transform active:scale-[0.98]"
               >
                 <FontAwesomeIcon icon={faPlus} />
-                <span>Create Task / Exam</span>
+                <span>Create Task</span>
+              </button>
+            )}
+            {isTeacherOrAdmin && (
+              <button
+                onClick={() => router.push(`/teacher/assessments/create?courseId=${course.id}`)}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 flex items-center space-x-2 transition-all transform active:scale-[0.98]"
+              >
+                <FontAwesomeIcon icon={faPlus} />
+                <span>Create Exam</span>
               </button>
             )}
           </div>
@@ -564,6 +601,7 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
                       currentUserId={user?.id}
                       userRole={user?.role}
                       onRefreshComments={fetchCourse}
+                      mentionableUsers={mentionableUsers}
                     />
                   </div>
                 );
@@ -575,70 +613,157 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
 
       {/* TAB CONTENT: CLASSWORK */}
       {activeTab === 'classwork' && (
-        <div className="space-y-6">
+        <div className="space-y-8">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold text-white">Classworks, Assignments & Exams</h3>
-            {isTeacherOrAdmin && (
-              <button
-                onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}`)}
-                className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-2"
-              >
-                <FontAwesomeIcon icon={faPlus} />
-                <span>New Task</span>
-              </button>
-            )}
+            <div className="flex items-center space-x-3">
+              {isTeacherOrAdmin && (
+                <button
+                  onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}`)}
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-2"
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>New Task</span>
+                </button>
+              )}
+              {isTeacherOrAdmin && (
+                <button
+                  onClick={() => router.push(`/teacher/assessments/create?courseId=${course.id}`)}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-2"
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>New Exam</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {course.tasks?.length === 0 ? (
+          {!course.tasks?.length && !course.assessments?.length ? (
             <div className="text-center py-12 glass-panel rounded-2xl border border-slate-800/60">
               <FontAwesomeIcon icon={faTasks} className="text-3xl text-slate-600 mb-3" />
               <p className="text-sm font-semibold text-slate-300">No active tasks or exams assigned yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {course.tasks?.map((task) => (
-                <div key={task.id} className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-all">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        task.isExam ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
-                      }`}>
-                        {task.isExam ? `EXAM (${task.examDurationMin || 60} min)` : task.taskType}
-                      </span>
-                      <span className="text-xs text-slate-400 font-semibold">{task.maxPoints} Points</span>
-                    </div>
+            <div className="space-y-8">
+              {/* Regular Tasks Group */}
+              {course.tasks && course.tasks.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-extrabold text-teal-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                    Assignments & Exercises
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {course.tasks.map((task) => (
+                      <div key={task.id} className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-all">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              task.isExam ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                            }`}>
+                              {task.isExam ? `EXAM (${task.examDurationMin || 60} min)` : task.taskType}
+                            </span>
+                            <span className="text-xs text-slate-400 font-semibold">{task.maxPoints} Points</span>
+                          </div>
 
-                    <h4 className="text-sm font-bold text-slate-100">{task.title}</h4>
-                    {task.description && (
-                      <p className="text-xs text-slate-400 line-clamp-2">{task.description}</p>
-                    )}
-                  </div>
+                          <h4 className="text-sm font-bold text-slate-100">{task.title}</h4>
+                          {task.description && (
+                            <p className="text-xs text-slate-400 line-clamp-2">{task.description}</p>
+                          )}
+                        </div>
 
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
-                      <FontAwesomeIcon icon={faClock} className="text-slate-500" />
-                      <span>Due: {new Date(task.deadline).toLocaleString()}</span>
-                    </div>
+                        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                          <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
+                            <FontAwesomeIcon icon={faClock} className="text-slate-500" />
+                            <span>Due: {new Date(task.deadline).toLocaleString()}</span>
+                          </div>
 
-                    {user?.role === 'STUDENT' ? (
-                      <button
-                        onClick={() => router.push(`/student/exam?taskId=${task.id}`)}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-brand-600/20"
-                      >
-                        <FontAwesomeIcon icon={faCode} />
-                        <span>Launch IDE</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => router.push(`/teacher/submissions?taskId=${task.id}`)}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold"
-                      >
-                        Submissions ({task._count?.submissions || 0})
-                      </button>
-                    )}
+                          {user?.role === 'STUDENT' ? (
+                            <button
+                              onClick={() => router.push(`/student/exam?taskId=${task.id}`)}
+                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-brand-600/20"
+                            >
+                              <FontAwesomeIcon icon={faCode} />
+                              <span>Launch IDE</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => router.push(`/teacher/submissions?taskId=${task.id}`)}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold"
+                            >
+                              Submissions ({task._count?.submissions || 0})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Exams & Assessments Group */}
+              {course.assessments && course.assessments.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-extrabold text-rose-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                    Exams & Assessments
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {course.assessments.map((assessment) => (
+                      <div key={assessment.id} className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-rose-500/40 transition-all">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 uppercase">
+                              {assessment.type}
+                            </span>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                              assessment.status === 'RUNNING' ? 'text-teal-400 animate-pulse'
+                              : assessment.status === 'FINISHED' ? 'text-slate-500'
+                              : 'text-amber-400'
+                            }`}>
+                              {assessment.status}
+                            </span>
+                          </div>
+
+                          <h4 className="text-sm font-bold text-slate-100">{assessment.title}</h4>
+                          {assessment.description && (
+                            <p className="text-xs text-slate-400 line-clamp-2">{assessment.description}</p>
+                          )}
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                          <div className="flex flex-col text-[11px] text-slate-400 space-y-1">
+                            {assessment.startTime && (
+                              <div className="flex items-center space-x-1.5">
+                                <FontAwesomeIcon icon={faClock} className="text-slate-500" />
+                                <span>Starts: {new Date(assessment.startTime).toLocaleString()}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center space-x-1.5">
+                              <FontAwesomeIcon icon={faClock} className="text-slate-500" />
+                              <span>Duration: {assessment.durationMin || '∞'} min</span>
+                            </div>
+                          </div>
+
+                          {user?.role === 'STUDENT' ? (
+                            <button
+                              onClick={() => router.push(`/student/assessments/${assessment.id}`)}
+                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-rose-600/20"
+                            >
+                              <FontAwesomeIcon icon={faExternalLinkAlt} />
+                              <span>Join Arena</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => router.push(`/teacher/assessments/${assessment.id}/arena`)}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold"
+                            >
+                              Manage ({assessment._count?.participants || 0} participants)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

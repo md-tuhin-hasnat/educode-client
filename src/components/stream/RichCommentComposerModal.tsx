@@ -34,6 +34,9 @@ interface RichCommentComposerModalProps {
   subtitle?: string;
   submitLabel?: string;
   replyingToName?: string;
+  quotedText?: string;
+  quotedAuthor?: string;
+  mentionableUsers?: { id: string; name: string; avatarUrl?: string; role?: string }[];
 }
 
 export const RichCommentComposerModal: React.FC<RichCommentComposerModalProps> = ({
@@ -45,6 +48,9 @@ export const RichCommentComposerModal: React.FC<RichCommentComposerModalProps> =
   subtitle = 'Interactive Jupyter Notebook Editor • Runnable Code Blocks • Attachments',
   submitLabel = 'Post Comment',
   replyingToName,
+  quotedText,
+  quotedAuthor,
+  mentionableUsers,
 }) => {
   const [body, setBody] = useState(initialBody);
   const [codeBlocks, setCodeBlocks] = useState<CodeBlockItem[]>([]);
@@ -96,6 +102,15 @@ export const RichCommentComposerModal: React.FC<RichCommentComposerModalProps> =
 
     // NOTE: Code blocks are already embedded as markdown fences within `body`
     // by WordMarkdownEditor.syncCellsToParent(), so we do NOT re-append them here.
+
+    if (quotedText && quotedAuthor) {
+      const cleanQuotedText = quotedText
+        .replace(/<[^>]*>/g, '') // strip basic HTML tags if any (the prose viewer uses dangerouslySetInnerHTML but the original might be markdown or html)
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n');
+      finalBody = `> **Replying to @${quotedAuthor}**\n${cleanQuotedText}\n\n${finalBody}`;
+    }
 
     if (attachments.length > 0) {
       const attsMd =
@@ -149,6 +164,19 @@ export const RichCommentComposerModal: React.FC<RichCommentComposerModalProps> =
 
         {/* Content Body */}
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+          {quotedText && (
+            <div className="pl-4 pr-3 py-3 border-l-4 border-teal-500 bg-teal-500/10 rounded-r-xl relative group">
+              <div className="flex items-center space-x-2 mb-1">
+                <FontAwesomeIcon icon={faReply} className="text-[10px] text-teal-400" />
+                <span className="text-[11px] font-bold text-teal-300">Replying to {quotedAuthor || 'someone'}</span>
+              </div>
+              <div
+                className="text-xs text-slate-300 line-clamp-2 max-h-12 overflow-hidden prose prose-invert prose-sm"
+                dangerouslySetInnerHTML={{ __html: quotedText }}
+              />
+            </div>
+          )}
+
           {/* Word Markdown Editor */}
           <div className="space-y-2">
             <WordMarkdownEditor
@@ -163,6 +191,7 @@ export const RichCommentComposerModal: React.FC<RichCommentComposerModalProps> =
               }
               minHeight="280px"
               isPostRunnable={true}
+              mentionableUsers={mentionableUsers}
             />
           </div>
 

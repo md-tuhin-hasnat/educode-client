@@ -6,6 +6,7 @@ export interface UserSession {
   name: string;
   role: 'STUDENT' | 'TEACHER' | 'ADMIN';
   token: string;
+  refreshToken?: string;
   departmentId?: string;
 }
 
