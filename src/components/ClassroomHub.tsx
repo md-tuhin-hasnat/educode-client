@@ -22,11 +22,20 @@ import {
   faAward,
   faFileUpload,
   faPaperclip,
+  faCloud,
+  faFlask,
+  faBookOpen,
+  faCheckCircle,
+  faLayerGroup,
+  faListUl,
+  faChevronRight,
+  faSpinner,
 } from '@fortawesome/free-solid-svg-icons';
 import { EnrollStudentsModal } from '@/components/EnrollStudentsModal';
 import { RichPostComposer, CodeBlockItem } from '@/components/stream/RichPostComposer';
 import { PostContentRenderer } from '@/components/stream/PostContentRenderer';
 import { StreamComments, CommentData } from '@/components/stream/StreamComments';
+import { GoogleDrivePickerModal, SelectedDriveMaterial } from '@/components/GoogleDrivePickerModal';
 
 interface StreamPostAttachment {
   id: string;
@@ -50,6 +59,35 @@ interface StreamPostItem {
   comments?: CommentData[];
 }
 
+interface CourseTaskItem {
+  id: string;
+  title: string;
+  description?: string;
+  taskType: string;
+  language: string;
+  maxPoints: number;
+  deadline: string;
+  isExam: boolean;
+  examDurationMin?: number;
+  assessmentId?: string | null;
+  assessment?: { id: string; title: string; type: string } | null;
+  testCases?: Array<{ id: number; points: number; isHidden: boolean }>;
+  _count?: { submissions: number };
+}
+
+interface CourseAssessmentItem {
+  id: string;
+  title: string;
+  description?: string;
+  type: string;
+  status: string;
+  startTime?: string;
+  durationMin?: number;
+  createdAt: string;
+  tasks?: CourseTaskItem[];
+  _count?: { participants: number; tasks: number };
+}
+
 interface CourseDetails {
   id: string;
   subjectCode: string;
@@ -62,18 +100,7 @@ interface CourseDetails {
   section?: { name: string };
   teacher: { id: string; fullName: string; email: string; profilePicUrl?: string };
   ta?: { id: string; fullName: string; email: string; profilePicUrl?: string } | null;
-  tasks: Array<{
-    id: string;
-    title: string;
-    description?: string;
-    taskType: string;
-    language: string;
-    maxPoints: number;
-    deadline: string;
-    isExam: boolean;
-    examDurationMin?: number;
-    _count?: { submissions: number };
-  }>;
+  tasks: CourseTaskItem[];
   materials: Array<{
     id: string;
     title: string;
@@ -96,17 +123,7 @@ interface CourseDetails {
     };
     section?: { name: string };
   }>;
-  assessments: Array<{
-    id: string;
-    title: string;
-    description?: string;
-    type: string;
-    status: string;
-    startTime?: string;
-    durationMin?: number;
-    createdAt: string;
-    _count?: { participants: number };
-  }>;
+  assessments: CourseAssessmentItem[];
 }
 
 interface ClassroomHubProps {
@@ -131,11 +148,51 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
   const [materialDesc, setMaterialDesc] = useState('');
   const [materialUrl, setMaterialUrl] = useState('');
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+
+  // Quick Assessment Creation State
+  const [showAssessmentModal, setShowAssessmentModal] = useState(false);
+  const [assessmentType, setAssessmentType] = useState<'LAB' | 'ASSIGNMENT' | 'EXAM'>('LAB');
+  const [assessmentTitle, setAssessmentTitle] = useState('');
+  const [assessmentDesc, setAssessmentDesc] = useState('');
+  const [assessmentDuration, setAssessmentDuration] = useState<number>(120);
+  const [isCreatingAssessment, setIsCreatingAssessment] = useState(false);
 
   const { user } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isTeacherOrAdmin = user?.role === 'ADMIN' || user?.role === 'TEACHER';
+
+  const handleCreateAssessment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assessmentTitle.trim() || !course) return;
+
+    try {
+      setIsCreatingAssessment(true);
+      const res = await apiClient.post('/assessments', {
+        courseId: course.id,
+        title: assessmentTitle.trim(),
+        description: assessmentDesc.trim() || null,
+        type: assessmentType,
+        durationMin: assessmentType === 'EXAM' || assessmentType === 'LAB' ? Number(assessmentDuration) : null,
+      });
+
+      const newAssId = res.data?.id;
+      setAssessmentTitle('');
+      setAssessmentDesc('');
+      setShowAssessmentModal(false);
+      fetchCourse();
+
+      if (newAssId) {
+        router.push(`/teacher/tasks/new?courseId=${course.id}&assessmentId=${newAssId}`);
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to create assessment module';
+      alert(msg);
+    } finally {
+      setIsCreatingAssessment(false);
+    }
+  };
 
   const mentionableUsers = useMemo(() => {
     if (!course) return [];
@@ -291,6 +348,24 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
       alert(msg);
     } finally {
       setIsAddingMaterial(false);
+    }
+  };
+
+  const handleSelectDriveMaterials = async (selected: SelectedDriveMaterial[]) => {
+    try {
+      for (const item of selected) {
+        await apiClient.post(`/courses/${courseId}/materials`, {
+          title: item.title,
+          description: item.description,
+          fileUrl: item.fileUrl,
+          fileSizeKb: item.fileSizeKb,
+          mimeType: item.mimeType,
+        });
+      }
+      fetchCourse();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to attach Google Drive materials';
+      alert(msg);
     }
   };
 
@@ -614,153 +689,463 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
       {/* TAB CONTENT: CLASSWORK */}
       {activeTab === 'classwork' && (
         <div className="space-y-8">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-white">Classworks, Assignments & Exams</h3>
-            <div className="flex items-center space-x-3">
-              {isTeacherOrAdmin && (
+          {/* Header & Quick Creation Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-extrabold text-white">Coursework, Labs & Assessments</h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Manage interactive lab sessions, homework assignments, and exams containing programming problems.
+              </p>
+            </div>
+            
+            {isTeacherOrAdmin && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => {
+                    setAssessmentType('LAB');
+                    setShowAssessmentModal(true);
+                  }}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-lg shadow-emerald-600/20 transition-all"
+                >
+                  <FontAwesomeIcon icon={faFlask} />
+                  <span>+ New Lab</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setAssessmentType('ASSIGNMENT');
+                    setShowAssessmentModal(true);
+                  }}
+                  className="px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-lg shadow-brand-600/20 transition-all"
+                >
+                  <FontAwesomeIcon icon={faBookOpen} />
+                  <span>+ New Assignment</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setAssessmentType('EXAM');
+                    setShowAssessmentModal(true);
+                  }}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-lg shadow-rose-600/20 transition-all"
+                >
+                  <FontAwesomeIcon icon={faGraduationCap} />
+                  <span>+ New Exam</span>
+                </button>
+
                 <button
                   onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}`)}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-2"
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all"
                 >
                   <FontAwesomeIcon icon={faPlus} />
-                  <span>New Task</span>
+                  <span>+ Problem Task</span>
                 </button>
-              )}
-              {isTeacherOrAdmin && (
-                <button
-                  onClick={() => router.push(`/teacher/assessments/create?courseId=${course.id}`)}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-2"
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                  <span>New Exam</span>
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
-          {!course.tasks?.length && !course.assessments?.length ? (
-            <div className="text-center py-12 glass-panel rounded-2xl border border-slate-800/60">
-              <FontAwesomeIcon icon={faTasks} className="text-3xl text-slate-600 mb-3" />
-              <p className="text-sm font-semibold text-slate-300">No active tasks or exams assigned yet</p>
+          {!course.assessments?.length && !course.tasks?.length ? (
+            <div className="text-center py-16 glass-panel rounded-3xl border border-slate-800/60 space-y-3">
+              <FontAwesomeIcon icon={faFlask} className="text-4xl text-slate-600" />
+              <p className="text-sm font-bold text-slate-300">No active labs, assignments, or exams created yet</p>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Create a Lab, Assignment, or Exam and add multiple programming tasks to evaluate student solutions.
+              </p>
             </div>
           ) : (
-            <div className="space-y-8">
-              {/* Regular Tasks Group */}
-              {course.tasks && course.tasks.length > 0 && (
+            <div className="space-y-10">
+              {/* 🧪 GROUP 1: LABS & PRACTICAL SESSIONS */}
+              {course.assessments?.filter((a) => a.type === 'LAB').length > 0 && (
                 <div className="space-y-4">
-                  <h4 className="text-sm font-extrabold text-teal-400 uppercase tracking-wider border-b border-slate-800 pb-2">
-                    Assignments & Exercises
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {course.tasks.map((task) => (
-                      <div key={task.id} className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-all">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              task.isExam ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
-                            }`}>
-                              {task.isExam ? `EXAM (${task.examDurationMin || 60} min)` : task.taskType}
-                            </span>
-                            <span className="text-xs text-slate-400 font-semibold">{task.maxPoints} Points</span>
+                  <div className="flex items-center space-x-2 border-b border-emerald-900/40 pb-2">
+                    <FontAwesomeIcon icon={faFlask} className="text-emerald-400 text-sm" />
+                    <h4 className="text-sm font-extrabold text-emerald-400 uppercase tracking-wider">
+                      Laboratory Sessions & Hands-on Practicals
+                    </h4>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      ({course.assessments.filter((a) => a.type === 'LAB').length} Labs)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6">
+                    {course.assessments
+                      .filter((a) => a.type === 'LAB')
+                      .map((lab) => {
+                        const labTasks = lab.tasks || [];
+                        const totalPoints = labTasks.reduce((sum, t) => sum + (t.maxPoints || 0), 0);
+
+                        return (
+                          <div
+                            key={lab.id}
+                            className="glass-panel rounded-3xl border border-slate-800 overflow-hidden shadow-2xl space-y-4 p-6 hover:border-emerald-500/40 transition-all"
+                          >
+                            {/* Lab Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center space-x-2.5">
+                                  <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1">
+                                    <FontAwesomeIcon icon={faFlask} />
+                                    <span>LAB SESSION</span>
+                                  </span>
+                                  <span className="text-xs text-slate-400 font-semibold">
+                                    {labTasks.length} {labTasks.length === 1 ? 'Problem Task' : 'Problem Tasks'} ({totalPoints} pts)
+                                  </span>
+                                </div>
+                                <h4 className="text-base font-black text-white">{lab.title}</h4>
+                                {lab.description && (
+                                  <p className="text-xs text-slate-400 line-clamp-2">{lab.description}</p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center space-x-2.5 shrink-0">
+                                {isTeacherOrAdmin && (
+                                  <button
+                                    onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}&assessmentId=${lab.id}`)}
+                                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center space-x-1.5 transition-all"
+                                  >
+                                    <FontAwesomeIcon icon={faPlus} />
+                                    <span>Add Task to Lab</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Child Tasks List */}
+                            <div className="space-y-2.5">
+                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                                Problems in this Lab ({labTasks.length})
+                              </p>
+
+                              {labTasks.length === 0 ? (
+                                <div className="p-4 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                                  No problems added to this lab yet.{' '}
+                                  {isTeacherOrAdmin && (
+                                    <button
+                                      onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}&assessmentId=${lab.id}`)}
+                                      className="text-emerald-400 font-bold hover:underline ml-1"
+                                    >
+                                      Add first problem
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {labTasks.map((t, idx) => (
+                                    <div
+                                      key={t.id}
+                                      className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/90 flex items-center justify-between gap-3 hover:border-emerald-500/30 transition-all"
+                                    >
+                                      <div className="space-y-1 min-w-0">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold">
+                                            #{idx + 1}
+                                          </span>
+                                          <h5 className="text-xs font-bold text-white truncate">{t.title}</h5>
+                                        </div>
+                                        <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                                          <span className="uppercase font-mono text-emerald-400 font-semibold">{t.language}</span>
+                                          <span>•</span>
+                                          <span className="text-brand-300 font-semibold">{t.maxPoints} pts</span>
+                                          <span>•</span>
+                                          <span>{t.testCases?.length || 0} Cases</span>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        onClick={() => router.push(user?.role === 'STUDENT' ? `/student/exam?taskId=${t.id}` : `/teacher/tasks/${t.id}`)}
+                                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold flex items-center space-x-1 shrink-0 transition-all"
+                                      >
+                                        <FontAwesomeIcon icon={faCode} className="text-[10px]" />
+                                        <span>Solve / IDE</span>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
-
-                          <h4 className="text-sm font-bold text-slate-100">{task.title}</h4>
-                          {task.description && (
-                            <p className="text-xs text-slate-400 line-clamp-2">{task.description}</p>
-                          )}
-                        </div>
-
-                        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                          <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
-                            <FontAwesomeIcon icon={faClock} className="text-slate-500" />
-                            <span>Due: {new Date(task.deadline).toLocaleString()}</span>
-                          </div>
-
-                          {user?.role === 'STUDENT' ? (
-                            <button
-                              onClick={() => router.push(`/student/exam?taskId=${task.id}`)}
-                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-brand-600/20"
-                            >
-                              <FontAwesomeIcon icon={faCode} />
-                              <span>Launch IDE</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => router.push(`/teacher/submissions?taskId=${task.id}`)}
-                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold"
-                            >
-                              Submissions ({task._count?.submissions || 0})
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
                   </div>
                 </div>
               )}
 
-              {/* Exams & Assessments Group */}
-              {course.assessments && course.assessments.length > 0 && (
+              {/* 📝 GROUP 2: ASSIGNMENTS & HOMEWORKS */}
+              {course.assessments?.filter((a) => a.type === 'ASSIGNMENT').length > 0 && (
                 <div className="space-y-4">
-                  <h4 className="text-sm font-extrabold text-rose-400 uppercase tracking-wider border-b border-slate-800 pb-2">
-                    Exams & Assessments
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {course.assessments.map((assessment) => (
-                      <div key={assessment.id} className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-rose-500/40 transition-all">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 uppercase">
-                              {assessment.type}
-                            </span>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                              assessment.status === 'RUNNING' ? 'text-teal-400 animate-pulse'
-                              : assessment.status === 'FINISHED' ? 'text-slate-500'
-                              : 'text-amber-400'
-                            }`}>
-                              {assessment.status}
-                            </span>
-                          </div>
+                  <div className="flex items-center space-x-2 border-b border-brand-900/40 pb-2">
+                    <FontAwesomeIcon icon={faBookOpen} className="text-brand-400 text-sm" />
+                    <h4 className="text-sm font-extrabold text-brand-400 uppercase tracking-wider">
+                      Course Assignments & Project Modules
+                    </h4>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      ({course.assessments.filter((a) => a.type === 'ASSIGNMENT').length} Assignments)
+                    </span>
+                  </div>
 
-                          <h4 className="text-sm font-bold text-slate-100">{assessment.title}</h4>
-                          {assessment.description && (
-                            <p className="text-xs text-slate-400 line-clamp-2">{assessment.description}</p>
-                          )}
-                        </div>
+                  <div className="grid grid-cols-1 gap-6">
+                    {course.assessments
+                      .filter((a) => a.type === 'ASSIGNMENT')
+                      .map((assignment) => {
+                        const aTasks = assignment.tasks || [];
+                        const totalPoints = aTasks.reduce((sum, t) => sum + (t.maxPoints || 0), 0);
 
-                        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                          <div className="flex flex-col text-[11px] text-slate-400 space-y-1">
-                            {assessment.startTime && (
-                              <div className="flex items-center space-x-1.5">
-                                <FontAwesomeIcon icon={faClock} className="text-slate-500" />
-                                <span>Starts: {new Date(assessment.startTime).toLocaleString()}</span>
+                        return (
+                          <div
+                            key={assignment.id}
+                            className="glass-panel rounded-3xl border border-slate-800 overflow-hidden shadow-2xl space-y-4 p-6 hover:border-brand-500/40 transition-all"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center space-x-2.5">
+                                  <span className="px-2.5 py-0.5 rounded-lg bg-brand-500/20 text-brand-300 border border-brand-500/30 text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1">
+                                    <FontAwesomeIcon icon={faBookOpen} />
+                                    <span>ASSIGNMENT</span>
+                                  </span>
+                                  <span className="text-xs text-slate-400 font-semibold">
+                                    {aTasks.length} {aTasks.length === 1 ? 'Problem Task' : 'Problem Tasks'} ({totalPoints} pts)
+                                  </span>
+                                </div>
+                                <h4 className="text-base font-black text-white">{assignment.title}</h4>
+                                {assignment.description && (
+                                  <p className="text-xs text-slate-400 line-clamp-2">{assignment.description}</p>
+                                )}
                               </div>
-                            )}
-                            <div className="flex items-center space-x-1.5">
-                              <FontAwesomeIcon icon={faClock} className="text-slate-500" />
-                              <span>Duration: {assessment.durationMin || '∞'} min</span>
+
+                              <div className="flex items-center space-x-2.5 shrink-0">
+                                {isTeacherOrAdmin && (
+                                  <button
+                                    onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}&assessmentId=${assignment.id}`)}
+                                    className="px-3.5 py-1.5 rounded-xl bg-brand-600/20 hover:bg-brand-600/30 text-brand-300 border border-brand-500/30 text-xs font-bold flex items-center space-x-1.5 transition-all"
+                                  >
+                                    <FontAwesomeIcon icon={faPlus} />
+                                    <span>Add Task to Assignment</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Child Tasks List */}
+                            <div className="space-y-2.5">
+                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                                Problems in this Assignment ({aTasks.length})
+                              </p>
+
+                              {aTasks.length === 0 ? (
+                                <div className="p-4 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                                  No tasks added yet.
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {aTasks.map((t, idx) => (
+                                    <div
+                                      key={t.id}
+                                      className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/90 flex items-center justify-between gap-3 hover:border-brand-500/30 transition-all"
+                                    >
+                                      <div className="space-y-1 min-w-0">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="w-5 h-5 rounded-md bg-brand-500/20 text-brand-400 flex items-center justify-center text-[10px] font-bold">
+                                            #{idx + 1}
+                                          </span>
+                                          <h5 className="text-xs font-bold text-white truncate">{t.title}</h5>
+                                        </div>
+                                        <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                                          <span className="uppercase font-mono text-brand-300 font-semibold">{t.language}</span>
+                                          <span>•</span>
+                                          <span className="text-teal-300 font-semibold">{t.maxPoints} pts</span>
+                                          <span>•</span>
+                                          <span>{t.testCases?.length || 0} Cases</span>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        onClick={() => router.push(user?.role === 'STUDENT' ? `/student/exam?taskId=${t.id}` : `/teacher/tasks/${t.id}`)}
+                                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-brand-300 text-xs font-bold flex items-center space-x-1 shrink-0 transition-all"
+                                      >
+                                        <FontAwesomeIcon icon={faCode} className="text-[10px]" />
+                                        <span>Solve / IDE</span>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
 
-                          {user?.role === 'STUDENT' ? (
+              {/* 🎓 GROUP 3: EXAMS & ASSESSMENTS */}
+              {course.assessments?.filter((a) => a.type === 'EXAM').length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2 border-b border-rose-900/40 pb-2">
+                    <FontAwesomeIcon icon={faGraduationCap} className="text-rose-400 text-sm" />
+                    <h4 className="text-sm font-extrabold text-rose-400 uppercase tracking-wider">
+                      Exams & Evaluated Tests
+                    </h4>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      ({course.assessments.filter((a) => a.type === 'EXAM').length} Exams)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6">
+                    {course.assessments
+                      .filter((a) => a.type === 'EXAM')
+                      .map((exam) => {
+                        const examTasks = exam.tasks || [];
+                        const totalPoints = examTasks.reduce((sum, t) => sum + (t.maxPoints || 0), 0);
+
+                        return (
+                          <div
+                            key={exam.id}
+                            className="glass-panel rounded-3xl border border-slate-800 overflow-hidden shadow-2xl space-y-4 p-6 hover:border-rose-500/40 transition-all"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center space-x-2.5">
+                                  <span className="px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1">
+                                    <FontAwesomeIcon icon={faGraduationCap} />
+                                    <span>EXAM ASSESSMENT</span>
+                                  </span>
+                                  <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                                    exam.status === 'RUNNING' ? 'text-teal-400 animate-pulse'
+                                    : exam.status === 'FINISHED' ? 'text-slate-500'
+                                    : 'text-amber-400'
+                                  }`}>
+                                    {exam.status}
+                                  </span>
+                                  <span className="text-xs text-slate-400 font-semibold">
+                                    {examTasks.length} Problems ({totalPoints} pts) • {exam.durationMin || 60} mins
+                                  </span>
+                                </div>
+                                <h4 className="text-base font-black text-white">{exam.title}</h4>
+                                {exam.description && (
+                                  <p className="text-xs text-slate-400 line-clamp-2">{exam.description}</p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center space-x-2.5 shrink-0">
+                                {isTeacherOrAdmin ? (
+                                  <>
+                                    <button
+                                      onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}&assessmentId=${exam.id}`)}
+                                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                                    >
+                                      <FontAwesomeIcon icon={faPlus} />
+                                      <span>Add Problem</span>
+                                    </button>
+                                    <button
+                                      onClick={() => router.push(`/teacher/assessments/${exam.id}/arena`)}
+                                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20"
+                                    >
+                                      Manage Arena ({exam._count?.participants || 0})
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => router.push(`/student/assessments/${exam.id}`)}
+                                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md shadow-rose-600/20"
+                                  >
+                                    <FontAwesomeIcon icon={faExternalLinkAlt} />
+                                    <span>Join Arena</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Child Tasks List */}
+                            <div className="space-y-2.5">
+                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                                Problems in this Exam ({examTasks.length})
+                              </p>
+
+                              {examTasks.length === 0 ? (
+                                <div className="p-4 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                                  No problems added to this exam yet.
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {examTasks.map((t, idx) => (
+                                    <div
+                                      key={t.id}
+                                      className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/90 flex items-center justify-between gap-3 hover:border-rose-500/30 transition-all"
+                                    >
+                                      <div className="space-y-1 min-w-0">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="w-5 h-5 rounded-md bg-rose-500/20 text-rose-400 flex items-center justify-center text-[10px] font-bold">
+                                            #{idx + 1}
+                                          </span>
+                                          <h5 className="text-xs font-bold text-white truncate">{t.title}</h5>
+                                        </div>
+                                        <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                                          <span className="uppercase font-mono text-rose-300 font-semibold">{t.language}</span>
+                                          <span>•</span>
+                                          <span className="text-teal-300 font-semibold">{t.maxPoints} pts</span>
+                                          <span>•</span>
+                                          <span>{t.testCases?.length || 0} Cases</span>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        onClick={() => router.push(user?.role === 'STUDENT' ? `/student/exam?taskId=${t.id}` : `/teacher/tasks/${t.id}`)}
+                                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 text-xs font-bold flex items-center space-x-1 shrink-0 transition-all"
+                                      >
+                                        <FontAwesomeIcon icon={faCode} className="text-[10px]" />
+                                        <span>Solve / IDE</span>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* 📂 GROUP 4: STANDALONE TASKS (if any) */}
+              {course.tasks?.filter((t) => !t.assessmentId && !course.assessments?.some((a) => a.tasks?.some((at) => at.id === t.id))).length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
+                    <FontAwesomeIcon icon={faTasks} className="text-slate-400 text-sm" />
+                    <h4 className="text-sm font-extrabold text-slate-300 uppercase tracking-wider">
+                      Standalone Problem Tasks
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {course.tasks
+                      .filter((t) => !t.assessmentId && !course.assessments?.some((a) => a.tasks?.some((at) => at.id === t.id)))
+                      .map((task) => (
+                        <div
+                          key={task.id}
+                          className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-all"
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                                {task.taskType}
+                              </span>
+                              <span className="text-xs text-slate-400 font-semibold">{task.maxPoints} Points</span>
+                            </div>
+                            <h4 className="text-sm font-bold text-slate-100">{task.title}</h4>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                            <span className="text-[11px] text-slate-500">Due: {new Date(task.deadline).toLocaleDateString()}</span>
                             <button
-                              onClick={() => router.push(`/student/assessments/${assessment.id}`)}
-                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-rose-600/20"
+                              onClick={() => router.push(user?.role === 'STUDENT' ? `/student/exam?taskId=${task.id}` : `/teacher/tasks/${task.id}`)}
+                              className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-bold"
                             >
-                              <FontAwesomeIcon icon={faExternalLinkAlt} />
-                              <span>Join Arena</span>
+                              Open Task
                             </button>
-                          ) : (
-                            <button
-                              onClick={() => router.push(`/teacher/assessments/${assessment.id}/arena`)}
-                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold"
-                            >
-                              Manage ({assessment._count?.participants || 0} participants)
-                            </button>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               )}
@@ -772,19 +1157,29 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
       {/* TAB CONTENT: MATERIALS (AGGREGATED & SORTED) */}
       {activeTab === 'materials' && (
         <div className="space-y-8">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-extrabold text-white">Course Materials & References Hub</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Aggregated course slides, PDFs, and post-linked attachments</p>
+              <p className="text-xs text-slate-400 mt-0.5">Aggregated course slides, PDFs, Google Drive files, and post-linked attachments</p>
             </div>
             {isTeacherOrAdmin && (
-              <button
-                onClick={() => setShowMaterialModal(true)}
-                className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold flex items-center space-x-2 shadow-lg shadow-brand-600/30"
-              >
-                <FontAwesomeIcon icon={faPlus} />
-                <span>Upload Direct Material</span>
-              </button>
+              <div className="flex items-center space-x-2.5">
+                <button
+                  onClick={() => setShowDrivePicker(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center space-x-2 shadow-lg shadow-emerald-600/30 transition-all"
+                >
+                  <FontAwesomeIcon icon={faCloud} />
+                  <span>Google Drive Upload & Fetch</span>
+                </button>
+                <button
+                  onClick={() => setShowMaterialModal(true)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                  title="Upload via direct link or custom URL"
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>Manual Link</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -795,45 +1190,75 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
             </h4>
 
             {directMaterials.length === 0 ? (
-              <p className="text-xs text-slate-500 italic py-2">No direct course documents uploaded yet.</p>
+              <div className="p-8 rounded-2xl border border-dashed border-slate-800 text-center space-y-3 bg-slate-950/40">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl mx-auto">
+                  <FontAwesomeIcon icon={faCloud} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-300">No course materials added yet</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Upload slides or link documents directly from your synced Google Drive.</p>
+                </div>
+                {isTeacherOrAdmin && (
+                  <button
+                    onClick={() => setShowDrivePicker(true)}
+                    className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all"
+                  >
+                    Open Google Drive Hub
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="space-y-3">
-                {directMaterials.map((mat) => (
-                  <div key={mat.id} className="glass-panel p-4 rounded-xl border border-slate-800 flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 text-lg">
-                        <FontAwesomeIcon icon={faFileAlt} />
+                {directMaterials.map((mat) => {
+                  const isGDrive = mat.fileUrl.includes('drive.google.com') || mat.fileUrl.includes('docs.google.com');
+                  return (
+                    <div key={mat.id} className="glass-panel p-4 rounded-xl border border-slate-800 flex items-center justify-between hover:border-slate-700 transition-all">
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg ${
+                          isGDrive
+                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                            : 'bg-teal-500/10 border-teal-500/30 text-teal-400'
+                        }`}>
+                          <FontAwesomeIcon icon={isGDrive ? faCloud : faFileAlt} />
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <h4 className="text-xs font-bold text-slate-200">{mat.title}</h4>
+                            {isGDrive && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-bold">
+                                Google Drive
+                              </span>
+                            )}
+                          </div>
+                          {mat.description && <p className="text-[11px] text-slate-400 mt-0.5">{mat.description}</p>}
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            Uploaded by {mat.uploader?.fullName} • {new Date(mat.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-200">{mat.title}</h4>
-                        {mat.description && <p className="text-[11px] text-slate-400">{mat.description}</p>}
-                        <p className="text-[10px] text-slate-500 mt-0.5">
-                          Uploaded by {mat.uploader?.fullName} • {new Date(mat.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center space-x-3">
-                      <a
-                        href={mat.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-400 rounded-lg text-xs font-medium flex items-center space-x-1.5"
-                      >
-                        <FontAwesomeIcon icon={faExternalLinkAlt} />
-                        <span>View / Download</span>
-                      </a>
-                      {isTeacherOrAdmin && (
-                        <button
-                          onClick={() => handleDeleteMaterial(mat.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors text-xs"
+                      <div className="flex items-center space-x-3">
+                        <a
+                          href={mat.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-400 hover:text-teal-300 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors"
                         >
-                          <FontAwesomeIcon icon={faTrash} />
-                        </button>
-                      )}
+                          <FontAwesomeIcon icon={faExternalLinkAlt} />
+                          <span>{isGDrive ? 'Open in Drive' : 'View / Download'}</span>
+                        </a>
+                        {isTeacherOrAdmin && (
+                          <button
+                            onClick={() => handleDeleteMaterial(mat.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors text-xs"
+                          >
+                            <FontAwesomeIcon icon={faTrash} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1069,6 +1494,15 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
         </div>
       )}
 
+      {/* GOOGLE DRIVE HUB MODAL */}
+      <GoogleDrivePickerModal
+        isOpen={showDrivePicker}
+        onClose={() => setShowDrivePicker(false)}
+        onSelectMaterials={handleSelectDriveMaterials}
+        courseTitle={course?.title}
+        allowMultiple={true}
+      />
+
       {/* ENROLL STUDENTS BULK MODAL */}
       {course && (
         <EnrollStudentsModal
@@ -1079,6 +1513,145 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
           subjectCode={course.subjectCode}
           onSuccess={fetchCourse}
         />
+      )}
+
+      {/* QUICK ASSESSMENT / LAB CREATION MODAL */}
+      {showAssessmentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-slate-700 shadow-2xl space-y-5 bg-slate-900/95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <FontAwesomeIcon
+                  icon={assessmentType === 'LAB' ? faFlask : assessmentType === 'ASSIGNMENT' ? faBookOpen : faGraduationCap}
+                  className={`text-base ${
+                    assessmentType === 'LAB' ? 'text-emerald-400' : assessmentType === 'ASSIGNMENT' ? 'text-brand-400' : 'text-rose-400'
+                  }`}
+                />
+                <h3 className="text-base font-bold text-white">
+                  Create New {assessmentType === 'LAB' ? 'Lab Session' : assessmentType === 'ASSIGNMENT' ? 'Assignment' : 'Exam Assessment'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAssessmentModal(false)}
+                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAssessment} className="space-y-4">
+              {/* Type Switcher */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Coursework Module Type
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['LAB', 'ASSIGNMENT', 'EXAM'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setAssessmentType(t)}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center space-x-1.5 ${
+                        assessmentType === t
+                          ? t === 'LAB'
+                            ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500'
+                            : t === 'ASSIGNMENT'
+                            ? 'bg-brand-600/30 text-brand-300 border-brand-500'
+                            : 'bg-rose-600/30 text-rose-300 border-rose-500'
+                          : 'bg-slate-800/60 text-slate-400 border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      <FontAwesomeIcon icon={t === 'LAB' ? faFlask : t === 'ASSIGNMENT' ? faBookOpen : faGraduationCap} />
+                      <span>{t === 'LAB' ? 'Lab' : t === 'ASSIGNMENT' ? 'Assignment' : 'Exam'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Module Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={
+                    assessmentType === 'LAB'
+                      ? 'e.g. Lab 03 - Graph Algorithms & DFS'
+                      : assessmentType === 'ASSIGNMENT'
+                      ? 'e.g. Assignment 02 - Banking System Architecture'
+                      : 'e.g. Final Exam 2026 - Data Structures'
+                  }
+                  value={assessmentTitle}
+                  onChange={(e) => setAssessmentTitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Instructions / Description
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Overview of this lab session or assignment requirements..."
+                  value={assessmentDesc}
+                  onChange={(e) => setAssessmentDesc(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 resize-none"
+                />
+              </div>
+
+              {/* Duration for Labs / Exams */}
+              {(assessmentType === 'LAB' || assessmentType === 'EXAM') && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Allocated Duration (Minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={480}
+                    value={assessmentDuration}
+                    onChange={(e) => setAssessmentDuration(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Defines the live arena or lab session timer (e.g. 120 mins = 2 hours).
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAssessmentModal(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-700 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!assessmentTitle.trim() || isCreatingAssessment}
+                  className="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center space-x-1.5 shadow-lg shadow-brand-600/30 transition-all"
+                >
+                  {isCreatingAssessment ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faPlus} />
+                      <span>Create & Add Problems</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

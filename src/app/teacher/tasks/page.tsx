@@ -6,16 +6,14 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faPlus,
   faSearch,
-  faFilter,
   faCode,
   faCalendarAlt,
   faCheckCircle,
   faTimesCircle,
-  faBookOpen,
   faTasks,
-  faGraduationCap,
   faUserGraduate,
-  faChevronDown
+  faChevronDown,
+  faClipboardList,
 } from '@fortawesome/free-solid-svg-icons';
 import api from '@/config/api';
 
@@ -23,7 +21,6 @@ interface Task {
   id: string;
   title: string;
   description: string | null;
-  taskType: 'assignment' | 'exam' | 'lab';
   language: 'c' | 'cpp' | 'java' | 'python';
   maxPoints: number;
   deadline: string;
@@ -46,7 +43,7 @@ export default function TeacherTasksPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedCourse, setSelectedCourse] = useState<string>('all');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
@@ -67,36 +64,47 @@ export default function TeacherTasksPage() {
     fetchTasks();
   }, []);
 
+  // Extract unique courses for filter dropdown
+  const uniqueCourses = useMemo(() => {
+    const map = new Map<string, string>();
+    tasks.forEach((t) => {
+      if (t.course?.id) {
+        map.set(t.course.id, `${t.course.code} - ${t.course.title}`);
+      }
+    });
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
+  }, [tasks]);
+
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
-      const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            task.course.code.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = selectedType === 'all' || task.taskType === selectedType;
-      const matchesLanguage = selectedLanguage === 'all' || task.language === selectedLanguage;
-      const matchesStatus = selectedStatus === 'all' || 
-                            (selectedStatus === 'published' && task.isPublished) ||
-                            (selectedStatus === 'draft' && !task.isPublished);
+      const matchesSearch =
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.course?.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.course?.title?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      return matchesSearch && matchesType && matchesLanguage && matchesStatus;
+      const matchesCourse = selectedCourse === 'all' || task.course?.id === selectedCourse;
+      const matchesLanguage = selectedLanguage === 'all' || task.language === selectedLanguage;
+      const matchesStatus =
+        selectedStatus === 'all' ||
+        (selectedStatus === 'published' && task.isPublished) ||
+        (selectedStatus === 'draft' && !task.isPublished);
+
+      return matchesSearch && matchesCourse && matchesLanguage && matchesStatus;
     });
-  }, [tasks, searchQuery, selectedType, selectedLanguage, selectedStatus]);
+  }, [tasks, searchQuery, selectedCourse, selectedLanguage, selectedStatus]);
 
   const getLanguageColor = (lang: string) => {
     switch (lang.toLowerCase()) {
-      case 'python': return 'text-blue-400 bg-blue-500/10 border-blue-500/20';
-      case 'java': return 'text-red-400 bg-red-500/10 border-red-500/20';
-      case 'cpp': return 'text-purple-400 bg-purple-500/10 border-purple-500/20';
-      case 'c': return 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20';
-      default: return 'text-slate-400 bg-slate-500/10 border-slate-500/20';
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'exam': return faGraduationCap;
-      case 'lab': return faCode;
-      case 'assignment': return faBookOpen;
-      default: return faTasks;
+      case 'python':
+        return 'text-blue-400 bg-blue-500/10 border-blue-500/20';
+      case 'java':
+        return 'text-red-400 bg-red-500/10 border-red-500/20';
+      case 'cpp':
+        return 'text-purple-400 bg-purple-500/10 border-purple-500/20';
+      case 'c':
+        return 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20';
+      default:
+        return 'text-slate-400 bg-slate-500/10 border-slate-500/20';
     }
   };
 
@@ -107,60 +115,64 @@ export default function TeacherTasksPage() {
         <div>
           <div className="flex items-center space-x-2 text-xs font-semibold text-brand-400">
             <FontAwesomeIcon icon={faTasks} />
-            <span>Task Management</span>
+            <span>Problem Repository & Task Management</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">My Tasks</h1>
+          <h1 className="text-2xl font-bold text-white mt-1">Problem Tasks</h1>
           <p className="text-xs text-slate-400 mt-1">
-            Manage your assignments, exams, and labs.
+            Create, test, and manage programming tasks and problem suites.
           </p>
         </div>
 
         <Link
           href="/teacher/tasks/new"
-          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white text-sm font-semibold shadow-lg shadow-brand-600/30 flex items-center space-x-2 transition-all"
+          className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold flex items-center space-x-2 transition-all shadow-lg shadow-brand-600/30 shrink-0"
         >
           <FontAwesomeIcon icon={faPlus} />
-          <span>Create New Task</span>
+          <span>Create Task</span>
         </Link>
       </div>
 
-      {/* Filters and Search */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full lg:w-96">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <FontAwesomeIcon icon={faSearch} className="text-slate-500 text-sm" />
+      {/* Filter Bar */}
+      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="relative flex-1">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+            <FontAwesomeIcon icon={faSearch} className="text-xs" />
           </div>
           <input
             type="text"
-            placeholder="Search by title or course code..."
+            placeholder="Search tasks by title or course..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-900/50 border border-slate-700 text-white text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all placeholder-slate-500"
+            className="w-full bg-slate-900/80 border border-slate-700 text-white text-xs rounded-xl pl-9 pr-4 py-2.5 focus:outline-none focus:border-brand-500 placeholder-slate-500 transition-all"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Course Filter */}
           <div className="relative">
             <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="appearance-none bg-slate-900/50 border border-slate-700 text-white text-sm rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-brand-500 transition-all cursor-pointer min-w-[140px]"
+              value={selectedCourse}
+              onChange={(e) => setSelectedCourse(e.target.value)}
+              className="appearance-none bg-slate-900/80 border border-slate-700 text-white text-xs rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-brand-500 transition-all cursor-pointer min-w-[160px]"
             >
-              <option value="all">All Types</option>
-              <option value="assignment">Assignment</option>
-              <option value="exam">Exam</option>
-              <option value="lab">Lab</option>
+              <option value="all">All Courses</option>
+              {uniqueCourses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
             </select>
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
               <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
             </div>
           </div>
 
+          {/* Language Filter */}
           <div className="relative">
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="appearance-none bg-slate-900/50 border border-slate-700 text-white text-sm rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-brand-500 transition-all cursor-pointer min-w-[140px]"
+              className="appearance-none bg-slate-900/80 border border-slate-700 text-white text-xs rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-brand-500 transition-all cursor-pointer min-w-[140px]"
             >
               <option value="all">All Languages</option>
               <option value="c">C</option>
@@ -173,11 +185,12 @@ export default function TeacherTasksPage() {
             </div>
           </div>
 
+          {/* Status Filter */}
           <div className="relative">
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="appearance-none bg-slate-900/50 border border-slate-700 text-white text-sm rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-brand-500 transition-all cursor-pointer min-w-[140px]"
+              className="appearance-none bg-slate-900/80 border border-slate-700 text-white text-xs rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-brand-500 transition-all cursor-pointer min-w-[130px]"
             >
               <option value="all">All Status</option>
               <option value="published">Published</option>
@@ -195,7 +208,7 @@ export default function TeacherTasksPage() {
         {loading ? (
           <div className="glass-panel p-12 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-slate-400 space-y-4">
             <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm font-medium">Loading your tasks...</p>
+            <p className="text-sm font-medium">Loading tasks...</p>
           </div>
         ) : error ? (
           <div className="glass-panel p-8 rounded-2xl border border-red-900/30 bg-red-900/10 text-center space-y-3">
@@ -205,8 +218,8 @@ export default function TeacherTasksPage() {
         ) : filteredTasks.length === 0 ? (
           <div className="glass-panel p-12 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-slate-400 space-y-4">
             <FontAwesomeIcon icon={faClipboardList} className="text-4xl text-slate-600" />
-            <p className="text-sm font-medium text-slate-300">No tasks found</p>
-            <p className="text-xs">Adjust your filters or create a new task to get started.</p>
+            <p className="text-sm font-medium text-slate-300">No tasks match your filters</p>
+            <p className="text-xs">Adjust your filters or create a new task.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -226,10 +239,6 @@ export default function TeacherTasksPage() {
                         <FontAwesomeIcon icon={faCode} />
                         <span>{task.language}</span>
                       </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5">
-                        <FontAwesomeIcon icon={getTypeIcon(task.taskType)} />
-                        <span>{task.taskType}</span>
-                      </span>
                     </div>
                     {task.isPublished ? (
                       <span className="text-emerald-400 flex items-center space-x-1 text-xs font-medium" title="Published">
@@ -242,12 +251,12 @@ export default function TeacherTasksPage() {
                     )}
                   </div>
 
-                  <h3 className="text-lg font-bold text-white group-hover:text-brand-300 transition-colors line-clamp-1 mb-1">
+                  <h3 className="text-base font-bold text-white group-hover:text-brand-300 transition-colors line-clamp-1 mb-1">
                     {task.title}
                   </h3>
                   
                   <div className="text-xs font-mono text-brand-400/80 mb-3">
-                    {task.course.code}
+                    {task.course?.code} - {task.course?.title}
                   </div>
 
                   {task.description && (
@@ -271,7 +280,7 @@ export default function TeacherTasksPage() {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs font-medium">
-                    <span className="text-slate-400">Max Points: <span className="text-white">{task.maxPoints}</span></span>
+                    <span className="text-slate-400">Max Points: <span className="text-brand-400 font-bold">{task.maxPoints} pts</span></span>
                   </div>
                 </div>
               </Link>

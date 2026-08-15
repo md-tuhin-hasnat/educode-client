@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -13,15 +13,21 @@ import {
   faShieldAlt,
   faFileImport,
   faFileExport,
+  faFlask,
+  faBookOpen,
+  faGraduationCap,
 } from '@fortawesome/free-solid-svg-icons';
 import { EduCodeEditor } from '@/components/Editor/EduCodeEditor';
 
 export default function CreateTaskPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuthStore();
   
   const [courseId, setCourseId] = useState('');
   const [courses, setCourses] = useState<any[]>([]);
+  const [assessmentId, setAssessmentId] = useState<string>('');
+  const [assessments, setAssessments] = useState<any[]>([]);
   const [maxPoints, setMaxPoints] = useState(100);
 
   const [title, setTitle] = useState('');
@@ -40,6 +46,14 @@ export default function CreateTaskPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Initialize courseId and assessmentId from searchParams
+  useEffect(() => {
+    const qCourse = searchParams.get('courseId');
+    const qAssessment = searchParams.get('assessmentId');
+    if (qCourse) setCourseId(qCourse);
+    if (qAssessment) setAssessmentId(qAssessment);
+  }, [searchParams]);
+
   useEffect(() => {
     if (user?.token) {
       fetch(`${process.env.NEXT_PUBLIC_API_URL}/courses`, {
@@ -50,12 +64,31 @@ export default function CreateTaskPage() {
         const c = json.data?.items || json.items || json;
         if (Array.isArray(c)) {
           setCourses(c);
-          if (c.length > 0) setCourseId(c[0].id);
+          if (c.length > 0 && !courseId && !searchParams.get('courseId')) {
+            setCourseId(c[0].id);
+          }
         }
       })
       .catch(err => console.error("Failed to load courses", err));
     }
   }, [user]);
+
+  // When courseId changes, fetch course assessments
+  useEffect(() => {
+    if (user?.token && courseId) {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/assessments/course/${courseId}`, {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      })
+      .then(res => res.ok ? res.json() : [])
+      .then(json => {
+        const list = json.data?.items || json.items || json;
+        if (Array.isArray(list)) {
+          setAssessments(list);
+        }
+      })
+      .catch(err => console.error("Failed to load assessments", err));
+    }
+  }, [user, courseId]);
 
   const handleAddTestCase = () => {
     setTestCases([
@@ -151,6 +184,7 @@ export default function CreateTaskPage() {
         },
         body: JSON.stringify({
           courseId: courseId || 'course-123',
+          assessmentId: assessmentId ? assessmentId : undefined,
           title,
           description,
           taskType: 'assignment',
@@ -167,7 +201,12 @@ export default function CreateTaskPage() {
       });
 
       if (res.ok) {
-        router.push('/teacher/dashboard');
+        const createdTask = await res.json();
+        if (courseId) {
+          router.push(`/courses/${courseId}?tab=classwork`);
+        } else {
+          router.push('/teacher/dashboard');
+        }
       } else {
         const err = await res.json();
         alert(`Failed: ${err.message || 'Unknown error'}`);
@@ -229,8 +268,8 @@ export default function CreateTaskPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex justify-between items-center">
         <div>
-          <h1 className="text-xl font-bold text-white">Create Problem</h1>
-          <p className="text-xs text-slate-400 mt-1">Design programming problems with automated test case generation.</p>
+          <h1 className="text-xl font-bold text-white">Create Problem Task</h1>
+          <p className="text-xs text-slate-400 mt-1">Design programming problems and attach them to Labs, Assignments, or Exams.</p>
         </div>
         <div className="flex space-x-3">
           <input type="file" accept=".json" ref={fileInputRef} onChange={handleImport} className="hidden" />
@@ -250,10 +289,10 @@ export default function CreateTaskPage() {
         <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
             <FontAwesomeIcon icon={faCode} className="text-brand-500" />
-            <span>Task Metadata</span>
+            <span>Task Metadata & Parent Assessment</span>
           </h3>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Course</label>
               <select
@@ -267,6 +306,25 @@ export default function CreateTaskPage() {
                 ))}
               </select>
             </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Parent Lab / Assignment / Exam
+              </label>
+              <select
+                value={assessmentId}
+                onChange={(e) => setAssessmentId(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-brand-500 font-medium"
+              >
+                <option value="">None (Standalone Problem Task)</option>
+                {assessments.map((a: any) => (
+                  <option key={a.id} value={a.id}>
+                    [{a.type}] {a.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Max Points</label>
               <input

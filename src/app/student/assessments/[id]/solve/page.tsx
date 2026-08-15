@@ -27,11 +27,26 @@ import {
   faChevronLeft,
   faChevronRight,
   faCheck,
+  faPlus,
+  faFloppyDisk,
+  faFlask,
+  faVial,
+  faRotateRight,
+  faWindowMaximize,
+  faWindowRestore,
 } from '@fortawesome/free-solid-svg-icons';
 import IDESettingsModal, { DEFAULT_SETTINGS, IDESettings } from '@/components/IDESettingsModal';
 import FileExplorer, { WorkspaceFile } from '@/components/FileExplorer';
 import JavaPackageModal from '@/components/JavaPackageModal';
 import { PRESET_THEMES } from '@/components/themes';
+import { saveCodeDraft, loadCodeDraft, clearCodeDraft } from '@/utils/draftStorage';
+import {
+  TestCaseInput,
+  TestCaseResult,
+  TestSuiteSummary,
+  runAllTestCases,
+} from '@/utils/testCaseRunner';
+import TestCaseRunnerPanel from '@/components/TestCaseRunnerPanel';
 import { validateCodeSyntax, parseCompilerErrors, SyntaxMarker } from '@/utils/syntaxValidator';
 import type { Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
@@ -83,15 +98,17 @@ export default function StudentSolvePage() {
 
   // State mapped by task ID
   const [workspaces, setWorkspaces] = useState<Record<string, TaskWorkspaceState>>({});
-
-  const [activeTab, setActiveTab] = useState<'problem' | 'files' | 'console'>('problem');
+  const [activeTab, setActiveTab] = useState<'problem' | 'files' | 'console' | 'testcases'>('problem');
   const [isExecuting, setIsExecuting] = useState(false);
+  const [testSummaries, setTestSummaries] = useState<Record<string, TestSuiteSummary>>({});
+  const [isTesting, setIsTesting] = useState(false);
   
   const [isJavaPackageModalOpen, setIsJavaPackageModalOpen] = useState<boolean>(false);
 
   // VS Code Integrated Terminal State
   const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(true);
   const [terminalHeight, setTerminalHeight] = useState<number>(240);
+  const [isTerminalMaximized, setIsTerminalMaximized] = useState<boolean>(false);
   const [isTerminalResizing, setIsTerminalResizing] = useState<boolean>(false);
 
   // Full Focus & Resizable Splitter State
@@ -157,21 +174,40 @@ export default function StudentSolvePage() {
       
       setAssessment(data);
 
-      // Initialize workspace states
+      // Initialize workspace states with draft restoration
       const initialWorkspaces: Record<string, TaskWorkspaceState> = {};
       data.tasks?.forEach((t: any) => {
-        const lang = t.allowedLanguage?.toLowerCase() || 'cpp';
-        const files = getDefaultFilesForLanguage(lang as any, t.templateCode);
-        initialWorkspaces[t.id] = {
-          workspaceFiles: files,
-          openTabPaths: [files[0].path],
-          activeFilePath: files[0].path,
-          customInput: '5\n1 2 3 4 5',
-          consoleLogs: [],
-          executionOutput: null,
-          code: files[0].content,
-          language: lang as any
-        };
+        const draftKey = `${id}_${t.id}`;
+        const savedDraft = loadCodeDraft(draftKey);
+        if (savedDraft && Array.isArray(savedDraft.files) && savedDraft.files.length > 0) {
+          initialWorkspaces[t.id] = {
+            workspaceFiles: savedDraft.files,
+            openTabPaths: savedDraft.openTabPaths?.length ? savedDraft.openTabPaths : [savedDraft.files[0].path],
+            activeFilePath: savedDraft.activeFilePath || savedDraft.files[0].path,
+            customInput: '5\n1 2 3 4 5',
+            consoleLogs: [],
+            executionOutput: null,
+            code: savedDraft.code || savedDraft.files[0].content,
+            language: (savedDraft.language as any) || t.allowedLanguage?.toLowerCase() || 'cpp',
+          };
+          if (savedDraft.updatedAt) {
+            setLastSavedTime(new Date(savedDraft.updatedAt).toLocaleTimeString());
+            setDraftStatus('saved');
+          }
+        } else {
+          const lang = t.allowedLanguage?.toLowerCase() || 'cpp';
+          const files = getDefaultFilesForLanguage(lang as any, t.templateCode);
+          initialWorkspaces[t.id] = {
+            workspaceFiles: files,
+            openTabPaths: [files[0].path],
+            activeFilePath: files[0].path,
+            customInput: '5\n1 2 3 4 5',
+            consoleLogs: [],
+            executionOutput: null,
+            code: files[0].content,
+            language: lang as any
+          };
+        }
       });
       setWorkspaces(initialWorkspaces);
 
@@ -244,6 +280,10 @@ export default function StudentSolvePage() {
     }
   };
 
+  // Draft saving state
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+
   // Focus & integrity monitoring state
   const [focusWarnings, setFocusWarnings] = useState<number>(0);
   const [showWarningModal, setShowWarningModal] = useState<boolean>(false);
@@ -313,6 +353,42 @@ export default function StudentSolvePage() {
     }));
   };
 
+  // Auto-save active workspace draft
+  useEffect(() => {
+    if (!id || !currentTask || !currentWorkspace || currentWorkspace.workspaceFiles.length === 0) return;
+    setDraftStatus('saving');
+    const timer = setTimeout(() => {
+      const saved = saveCodeDraft(`${id}_${currentTask.id}`, {
+        language: currentWorkspace.language,
+        files: currentWorkspace.workspaceFiles,
+        openTabPaths: currentWorkspace.openTabPaths,
+        activeFilePath: currentWorkspace.activeFilePath,
+        code: currentWorkspace.code,
+      });
+      if (saved) {
+        setDraftStatus('saved');
+        setLastSavedTime(new Date().toLocaleTimeString());
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [id, currentTask, currentWorkspace?.workspaceFiles, currentWorkspace?.openTabPaths, currentWorkspace?.activeFilePath, currentWorkspace?.code, currentWorkspace?.language]);
+
+  const handleManualSaveDraft = () => {
+    if (!id || !currentTask || !currentWorkspace) return;
+    setDraftStatus('saving');
+    const saved = saveCodeDraft(`${id}_${currentTask.id}`, {
+      language: currentWorkspace.language,
+      files: currentWorkspace.workspaceFiles,
+      openTabPaths: currentWorkspace.openTabPaths,
+      activeFilePath: currentWorkspace.activeFilePath,
+      code: currentWorkspace.code,
+    });
+    if (saved) {
+      setDraftStatus('saved');
+      setLastSavedTime(new Date().toLocaleTimeString());
+    }
+  };
+
   const handleLanguageChange = (lang: 'cpp' | 'python' | 'java' | 'c') => {
     const initialFiles = getDefaultFilesForLanguage(lang);
     const mainFile = initialFiles[0];
@@ -326,6 +402,7 @@ export default function StudentSolvePage() {
   };
 
   const handleCodeChange = (newCode: string) => {
+    if (!currentWorkspace) return;
     updateCurrentWorkspace({
       code: newCode,
       workspaceFiles: currentWorkspace.workspaceFiles.map((f) => 
@@ -335,6 +412,7 @@ export default function StudentSolvePage() {
   };
 
   const handleSelectFile = (filePath: string) => {
+    if (!currentWorkspace) return;
     const file = currentWorkspace.workspaceFiles.find((f) => f.path === filePath);
     if (!file || file.isFolder) return;
 
@@ -351,6 +429,7 @@ export default function StudentSolvePage() {
 
   const handleCloseTab = (filePath: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!currentWorkspace) return;
     const updatedTabs = currentWorkspace.openTabPaths.filter((p) => p !== filePath);
     
     let nextActivePath = currentWorkspace.activeFilePath;
@@ -375,6 +454,7 @@ export default function StudentSolvePage() {
   };
 
   const handleCreateFile = (pathName: string, content = '') => {
+    if (!currentWorkspace) return;
     if (currentWorkspace.workspaceFiles.some((f) => f.path === pathName)) return;
     const newFile: WorkspaceFile = {
       id: Math.random().toString(36).substring(2, 9),
@@ -395,6 +475,7 @@ export default function StudentSolvePage() {
   };
 
   const handleCreateFolder = (folderPath: string) => {
+    if (!currentWorkspace) return;
     if (currentWorkspace.workspaceFiles.some((f) => f.path === folderPath)) return;
     const newFolder: WorkspaceFile = {
       id: Math.random().toString(36).substring(2, 9),
@@ -408,6 +489,7 @@ export default function StudentSolvePage() {
   };
 
   const handleDeletePath = (targetPath: string) => {
+    if (!currentWorkspace) return;
     const updatedFiles = currentWorkspace.workspaceFiles.filter((f) => f.path !== targetPath && !f.path.startsWith(targetPath + '/'));
     const updatedTabs = currentWorkspace.openTabPaths.filter((p) => p !== targetPath && !p.startsWith(targetPath + '/'));
     
@@ -561,6 +643,19 @@ export default function StudentSolvePage() {
     setIsTerminalResizing(true);
   };
 
+  const toggleMaximizeTerminal = useCallback(() => {
+    if (!containerRef.current) return;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const maxHeight = Math.max(100, containerRect.height - 36);
+    if (isTerminalMaximized) {
+      setTerminalHeight(240);
+      setIsTerminalMaximized(false);
+    } else {
+      setTerminalHeight(maxHeight);
+      setIsTerminalMaximized(true);
+    }
+  }, [isTerminalMaximized]);
+
   useEffect(() => {
     if (!isTerminalResizing) return;
 
@@ -571,7 +666,10 @@ export default function StudentSolvePage() {
         if (!containerRef.current) return;
         const containerRect = containerRef.current.getBoundingClientRect();
         const newHeight = containerRect.bottom - e.clientY;
-        setTerminalHeight(Math.max(100, Math.min(550, newHeight)));
+        const maxHeight = Math.max(100, containerRect.height - 36);
+        const clampedHeight = Math.max(60, Math.min(maxHeight, newHeight));
+        setTerminalHeight(clampedHeight);
+        setIsTerminalMaximized(clampedHeight >= maxHeight - 10);
       });
     };
 
@@ -591,6 +689,7 @@ export default function StudentSolvePage() {
   }, [isTerminalResizing]);
 
   const handleRunCode = async () => {
+    if (!currentWorkspace) return;
     setIsExecuting(true);
     setIsTerminalOpen(true);
 
@@ -611,6 +710,7 @@ export default function StudentSolvePage() {
   };
 
   const handleRunConsoleCode = async (stdinText?: string) => {
+    if (!currentWorkspace) return;
     setIsExecuting(true);
     const activeInput = typeof stdinText === 'string' ? stdinText : currentWorkspace.customInput;
 
@@ -668,6 +768,72 @@ export default function StudentSolvePage() {
       setIsExecuting(false);
     }
   };
+
+  // Run All Automated Evaluation Test Cases
+  const handleRunAllTests = async () => {
+    if (!currentTask || !currentWorkspace || isTesting) return;
+    setIsTesting(true);
+    setActiveTab('testcases');
+    setIsFullFocus(false);
+
+    const taskTestCases: TestCaseInput[] = (currentTask.testCases && currentTask.testCases.length > 0)
+      ? currentTask.testCases
+      : [
+          { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false },
+          { id: '2', order: 2, inputData: '3\n10 20 30', expectedOutput: '30 20 10', points: 25, isHidden: false },
+          { id: '3', order: 3, inputData: '1\n99', expectedOutput: '99', points: 25, isHidden: true },
+          { id: '4', order: 4, inputData: '4\n2 4 6 8', expectedOutput: '8 6 4 2', points: 25, isHidden: true },
+        ];
+
+    try {
+      const summary = await runAllTestCases(
+        taskTestCases,
+        currentWorkspace.code,
+        currentWorkspace.language,
+        currentWorkspace.workspaceFiles,
+        currentWorkspace.activeFilePath,
+        (progress) => {
+          setTestSummaries((prev) => {
+            const currentSum = prev[currentTask.id];
+            const existingResults = currentSum?.results ? [...currentSum.results] : [];
+            const idx = existingResults.findIndex((r) => r.testCaseId === progress.currentResult.testCaseId);
+            if (idx >= 0) {
+              existingResults[idx] = progress.currentResult;
+            } else {
+              existingResults.push(progress.currentResult);
+            }
+
+            return {
+              ...prev,
+              [currentTask.id]: {
+                totalCount: progress.totalCount,
+                passedCount: progress.passedCount,
+                failedCount: progress.failedCount,
+                totalPoints: taskTestCases.reduce((acc, t) => acc + (t.points ?? 10), 0),
+                earnedPoints: existingResults.reduce((acc, r) => acc + (r.passed ? r.points : 0), 0),
+                totalTimeMs: existingResults.reduce((acc, r) => acc + r.timeMs, 0),
+                status: progress.passedCount === progress.totalCount ? 'ALL_PASSED' : 'PARTIAL_PASSED',
+                results: existingResults,
+                logs: progress.logs,
+              },
+            };
+          });
+        }
+      );
+      setTestSummaries((prev) => ({ ...prev, [currentTask.id]: summary }));
+    } catch (err) {
+      console.error('Test runner execution error:', err);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleAddCustomTestCase = (tc: TestCaseInput) => {
+    if (!currentTask) return;
+    const currentList = currentTask.testCases || [];
+    currentTask.testCases = [...currentList, tc];
+  };
+
   if (isLoading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading Exam...</div>;
   if (error) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-red-500">{error}</div>;
   if (!assessment?.tasks || assessment.tasks.length === 0) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">No tasks found for this exam.</div>;
@@ -707,7 +873,7 @@ export default function StudentSolvePage() {
           <button
             onClick={() => setIsFullFocus(!isFullFocus)}
             title={isFullFocus ? 'Exit Focus Mode' : 'Enter Full Focus Mode'}
-            className={`p-1.5 w-8 h-8 rounded-lg border text-xs font-semibold flex items-center justify-center transition-all ${
+            className={`p-1.5 w-8 h-8 rounded-lg border text-xs font-semibold flex items-center justify-center transition-all shrink-0 ${
               isFullFocus
                 ? 'bg-brand-500/20 border-brand-500 text-brand-400'
                 : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
@@ -719,14 +885,14 @@ export default function StudentSolvePage() {
           <button
             onClick={() => setIsSettingsOpen(true)}
             title="IDE Settings"
-            className="p-1.5 w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center transition-all"
+            className="p-1.5 w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center transition-all shrink-0"
           >
             <FontAwesomeIcon icon={faGear} />
           </button>
 
           <button
             onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all border ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all border shrink-0 ${
               isTerminalOpen
                 ? 'bg-slate-800 text-white border-slate-700 shadow-sm'
                 : 'bg-slate-900/80 text-slate-400 hover:text-white border-slate-800'
@@ -736,10 +902,42 @@ export default function StudentSolvePage() {
             <span>Terminal</span>
           </button>
 
+          {/* Save Draft Button */}
+          <button
+            onClick={handleManualSaveDraft}
+            title="Save code draft locally so you can resume later"
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all border border-slate-700 shrink-0"
+          >
+            <FontAwesomeIcon icon={faFloppyDisk} className="text-[11px] text-emerald-400" />
+            <span>Save Draft</span>
+          </button>
+
+          {/* Live Draft Indicator */}
+          {lastSavedTime && (
+            <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 whitespace-nowrap shrink-0">
+              <span className={`w-2 h-2 rounded-full ${draftStatus === 'saving' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+              <span>{draftStatus === 'saving' ? 'Saving...' : `Draft saved (${lastSavedTime})`}</span>
+            </div>
+          )}
+
+          {/* Run All Test Cases Button */}
+          <button
+            onClick={handleRunAllTests}
+            disabled={isTesting}
+            className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-brand-600/30 flex items-center space-x-1.5 transition-all disabled:opacity-50 shrink-0"
+            title="Run all evaluation test cases against your solution"
+          >
+            <FontAwesomeIcon
+              icon={isTesting ? faRotateRight : faFlask}
+              className={`text-[10px] ${isTesting ? 'animate-spin' : ''}`}
+            />
+            <span className="whitespace-nowrap">{isTesting ? 'Testing...' : `Run Tests (${currentTask.testCases?.length || 4})`}</span>
+          </button>
+
           <button
             onClick={handleRunCode}
             disabled={isExecuting}
-            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow flex items-center space-x-1.5 transition-all disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow flex items-center space-x-1.5 transition-all disabled:opacity-50 shrink-0"
           >
             <FontAwesomeIcon icon={faPlay} className="text-[10px]" />
             <span>Run Code</span>
@@ -748,7 +946,7 @@ export default function StudentSolvePage() {
           <button
             onClick={handleSubmitExam}
             disabled={isSubmitting}
-            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow flex items-center space-x-1.5 transition-all disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow flex items-center space-x-1.5 transition-all disabled:opacity-50 shrink-0"
           >
             <FontAwesomeIcon icon={faCheck} className="text-[10px]" />
             <span>Submit Exam</span>
@@ -798,6 +996,27 @@ export default function StudentSolvePage() {
               </button>
 
               <button
+                onClick={() => setActiveTab('testcases')}
+                className={`px-3.5 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
+                  activeTab === 'testcases'
+                    ? 'border-brand-500 text-white bg-slate-800/50 font-bold'
+                    : 'border-transparent hover:text-slate-200'
+                }`}
+              >
+                <FontAwesomeIcon icon={faFlask} className="text-brand-400" />
+                <span>Test Cases</span>
+                {testSummaries[currentTask.id] && (
+                  <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold border ${
+                    testSummaries[currentTask.id].passedCount === testSummaries[currentTask.id].totalCount
+                      ? 'bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+                      : 'bg-rose-500/30 text-rose-300 border-rose-500/40'
+                  }`}>
+                    {testSummaries[currentTask.id].passedCount}/{testSummaries[currentTask.id].totalCount}
+                  </span>
+                )}
+              </button>
+
+              <button
                 onClick={() => setActiveTab('console')}
                 className={`px-3.5 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
                   activeTab === 'console'
@@ -816,7 +1035,22 @@ export default function StudentSolvePage() {
             </div>
 
             <div className="flex-1 p-5 overflow-y-auto space-y-4 text-xs text-slate-300 flex flex-col select-text">
-              {activeTab === 'problem' ? (
+              {activeTab === 'testcases' ? (
+                <div className="flex-1 -m-5 flex flex-col h-full overflow-hidden">
+                  <TestCaseRunnerPanel
+                    testCases={currentTask.testCases && currentTask.testCases.length > 0 ? currentTask.testCases : [
+                      { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false },
+                      { id: '2', order: 2, inputData: '3\n10 20 30', expectedOutput: '30 20 10', points: 25, isHidden: false },
+                      { id: '3', order: 3, inputData: '1\n99', expectedOutput: '99', points: 25, isHidden: true },
+                      { id: '4', order: 4, inputData: '4\n2 4 6 8', expectedOutput: '8 6 4 2', points: 25, isHidden: true },
+                    ]}
+                    summary={testSummaries[currentTask.id] || null}
+                    isRunning={isTesting}
+                    onRunAll={handleRunAllTests}
+                    onAddCustomTestCase={handleAddCustomTestCase}
+                  />
+                </div>
+              ) : activeTab === 'problem' ? (
                 <div className="space-y-4 prose prose-invert max-w-none">
                   <h2 className="text-lg font-bold text-white m-0">{currentTask.title}</h2>
                   <div className="flex space-x-2 text-[11px]">
@@ -986,6 +1220,19 @@ export default function StudentSolvePage() {
                     </div>
                   );
                 })}
+                <button
+                  onClick={() => {
+                    const ext = currentWorkspace.language === 'java' ? '.java' : currentWorkspace.language === 'python' ? '.py' : currentWorkspace.language === 'c' ? '.c' : '.cpp';
+                    const fileName = window.prompt(`Enter new file name:`, `file_${currentWorkspace.workspaceFiles.length + 1}${ext}`);
+                    if (fileName && fileName.trim()) {
+                      handleCreateFile(fileName.trim());
+                    }
+                  }}
+                  title="Create New File"
+                  className="h-full px-2.5 text-slate-400 hover:text-white hover:bg-slate-900 flex items-center justify-center border-r border-slate-800 transition-colors"
+                >
+                  <FontAwesomeIcon icon={faPlus} className="text-xs" />
+                </button>
               </div>
 
               <div className="flex items-center space-x-3 px-3 shrink-0 bg-[#111827]">
@@ -1059,14 +1306,22 @@ export default function StudentSolvePage() {
             {isTerminalOpen && (
               <div
                 style={{ height: `${terminalHeight}px` }}
-                className="border-t border-slate-800 bg-[#0e131f] flex flex-col shrink-0 relative transition-all duration-75"
+                className="border-t border-slate-800 bg-[#0e131f] flex flex-col shrink-0 relative transition-[height] duration-75"
               >
+                {/* Enhanced 100% Height Resizing Handle with indicator */}
                 <div
                   onMouseDown={handleTerminalResizeStart}
-                  className="h-1.5 w-full cursor-row-resize bg-slate-800/80 hover:bg-emerald-500/60 transition-colors absolute -top-1 left-0 right-0 z-30"
-                />
+                  onDoubleClick={toggleMaximizeTerminal}
+                  className="h-2.5 w-full cursor-row-resize hover:bg-brand-500/50 active:bg-brand-500 transition-colors absolute -top-1 left-0 right-0 z-30 flex items-center justify-center group"
+                  title="Drag to resize up to 100% or double-click to toggle maximize"
+                >
+                  <div className="w-12 h-1 rounded-full bg-slate-600 group-hover:bg-brand-400 group-active:bg-brand-400 transition-colors" />
+                </div>
 
-                <div className="h-8 bg-[#131927] border-b border-slate-800/80 px-3 flex items-center justify-between text-xs shrink-0 select-none">
+                <div 
+                  className="h-8 bg-[#131927] border-b border-slate-800/80 px-3 flex items-center justify-between text-xs shrink-0 select-none"
+                  onDoubleClick={toggleMaximizeTerminal}
+                >
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-1.5 text-slate-200 font-semibold">
                       <FontAwesomeIcon icon={faTerminal} className="text-emerald-400 text-xs" />
@@ -1085,9 +1340,17 @@ export default function StudentSolvePage() {
                     >
                       Clear
                     </button>
+                    {/* Maximize to 100% / Restore Button */}
+                    <button
+                      onClick={toggleMaximizeTerminal}
+                      className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      title={isTerminalMaximized ? "Restore Terminal Height" : "Maximize Terminal to 100%"}
+                    >
+                      <FontAwesomeIcon icon={isTerminalMaximized ? faWindowRestore : faWindowMaximize} className="text-xs" />
+                    </button>
                     <button
                       onClick={() => setIsTerminalOpen(false)}
-                      className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800"
+                      className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-slate-800"
                     >
                       <FontAwesomeIcon icon={faTimes} className="text-xs" />
                     </button>

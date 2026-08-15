@@ -15,6 +15,7 @@ import {
   faUndo,
 } from '@fortawesome/free-solid-svg-icons';
 import { apiClient } from '@/config/api';
+import { GoogleDrivePickerModal, SelectedDriveMaterial } from '@/components/GoogleDrivePickerModal';
 
 export interface CodeBlockItem {
   id: string;
@@ -69,6 +70,7 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
   const [newAttTitle, setNewAttTitle] = useState('');
   const [newAttUrl, setNewAttUrl] = useState('');
   const [showAttInput, setShowAttInput] = useState(false);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
 
   // Refs for server load protection (2.5s debounce, dirty checking, in-flight locking)
   const lastSavedContentRef = useRef<string>('');
@@ -218,6 +220,17 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
     setNewAttTitle('');
     setNewAttUrl('');
     setShowAttInput(false);
+  };
+
+  const handleSelectDriveMaterials = (selected: SelectedDriveMaterial[]) => {
+    const newItems: AttachmentItem[] = selected.map((s) => ({
+      title: s.title,
+      description: s.description,
+      fileUrl: s.fileUrl,
+      fileSizeKb: s.fileSizeKb,
+      mimeType: s.mimeType,
+    }));
+    setAttachments((prev) => [...prev, ...newItems]);
   };
 
   const handleRemoveAttachment = (index: number) => {
@@ -381,19 +394,29 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
 
           {/* Attachments & Course Materials Section */}
           <div className="space-y-3 pt-2 border-t border-slate-800/80">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-xs font-extrabold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
                 <FontAwesomeIcon icon={faPaperclip} className="text-brand-400" />
                 <span>Post Attachments & Class Resources ({attachments.length})</span>
               </h4>
-              <button
-                type="button"
-                onClick={() => setShowAttInput(!showAttInput)}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-brand-300 border border-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all"
-              >
-                <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
-                <span>Attach File Link</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDrivePicker(true)}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-md shadow-emerald-600/30 transition-all"
+                >
+                  <FontAwesomeIcon icon={faCloud} className="text-xs" />
+                  <span>Attach from Google Drive</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAttInput(!showAttInput)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                >
+                  <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
+                  <span>Manual Link</span>
+                </button>
+              </div>
             </div>
 
             {showAttInput && (
@@ -433,29 +456,43 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
               </div>
             )}
 
-            {attachments.map((att, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
-                    <FontAwesomeIcon icon={faPaperclip} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-200">{att.title}</p>
-                    <p className="text-[11px] text-slate-500 truncate max-w-sm">{att.fileUrl}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAttachment(idx)}
-                  className="w-7 h-7 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-900 flex items-center justify-center transition-colors"
+            {attachments.map((att, idx) => {
+              const isGDrive = att.fileUrl.includes('drive.google.com') || att.fileUrl.includes('docs.google.com');
+              return (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs"
                 >
-                  <FontAwesomeIcon icon={faTrash} />
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center space-x-3 overflow-hidden">
+                    <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+                      isGDrive
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : 'bg-brand-500/10 border-brand-500/20 text-brand-400'
+                    }`}>
+                      <FontAwesomeIcon icon={isGDrive ? faCloud : faPaperclip} />
+                    </div>
+                    <div className="truncate">
+                      <div className="flex items-center space-x-2">
+                        <p className="font-bold text-slate-200 truncate">{att.title}</p>
+                        {isGDrive && (
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-bold">
+                            Google Drive
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 truncate max-w-sm">{att.fileUrl}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(idx)}
+                    className="w-7 h-7 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-900 flex items-center justify-center transition-colors shrink-0"
+                  >
+                    <FontAwesomeIcon icon={faTrash} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -493,6 +530,14 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
           </div>
         </div>
       </div>
+
+      {/* GOOGLE DRIVE PICKER MODAL */}
+      <GoogleDrivePickerModal
+        isOpen={showDrivePicker}
+        onClose={() => setShowDrivePicker(false)}
+        onSelectMaterials={handleSelectDriveMaterials}
+        allowMultiple={true}
+      />
     </div>
   );
 };

@@ -34,8 +34,8 @@ export default function LoginPage() {
     try {
       // Attempt backend API login
       const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-        email,
-        password,
+        email: email.trim(),
+        password: password.trim(),
       });
 
       const { user: userData, accessToken, refreshToken } = response.data;
@@ -53,39 +53,19 @@ export default function LoginPage() {
       login(session);
       redirectToRoleDashboard(session.role);
     } catch (err: unknown) {
-      console.warn('[Login] Server unreachable or invalid credentials, checking preset offline accounts...', err);
-      
-      // Fallback offline preset accounts if server is unreachable or offline testing
-      if (password === 'password123' || password === 'Student@123' || password === 'Teacher@123' || password === 'Admin@123') {
-        let role: 'STUDENT' | 'TEACHER' | 'ADMIN' = 'STUDENT';
-        let name = 'Demo User';
-
-        if (email.includes('admin')) {
-          role = 'ADMIN';
-          name = 'System Administrator';
-        } else if (email.includes('teacher')) {
-          role = 'TEACHER';
-          name = 'Dr. Alan Turing';
-        } else {
-          role = 'STUDENT';
-          name = 'John Doe (Student)';
+      console.error('[Login Error]', err);
+      let message = 'Invalid credentials or server connection failed.';
+      if (axios.isAxiosError(err)) {
+        if (err.response?.data?.message) {
+          const rawMsg = err.response.data.message;
+          message = Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg;
+        } else if (err.code === 'ECONNREFUSED' || err.message.includes('Network Error')) {
+          message = `Cannot connect to API server at ${SERVER_ORIGIN}. Please ensure the backend is running.`;
+        } else if (err.response?.status === 401) {
+          message = 'Invalid email or password. Please verify your institutional credentials.';
         }
-
-        const session: UserSession = {
-          id: 'demo-user-id-123',
-          email,
-          name,
-          role,
-          token: 'demo-jwt-token-xyz',
-        };
-
-        login(session);
-        redirectToRoleDashboard(role);
-        return;
       }
-
-      const message = axios.isAxiosError(err) ? err.response?.data?.message : 'Invalid credentials or server connection failed.';
-      setErrorMsg(message || 'Invalid credentials or server connection failed.');
+      setErrorMsg(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -108,6 +88,7 @@ export default function LoginPage() {
   const fillQuickAccount = (demoEmail: string, demoPassword?: string) => {
     setEmail(demoEmail);
     setPassword(demoPassword || 'Student@123');
+    setErrorMsg('');
   };
 
   return (
@@ -150,7 +131,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@university.edu"
+                  placeholder="alan.turing@teacher.university.edu"
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-900/80 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
                 />
               </div>
@@ -198,30 +179,64 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Demo Account Selector */}
+          {/* Quick Demo / Institutional Account Selector */}
           <div className="mt-8 pt-6 border-t border-slate-800">
-            <p className="text-[11px] text-center text-slate-400 mb-3 font-medium">Quick Demo Accounts (Live Server Accounts)</p>
-            <div className="grid grid-cols-3 gap-2">
+            <p className="text-[11px] text-center text-slate-400 mb-3 font-medium">Quick Select Accounts</p>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => fillQuickAccount('student@university.edu', 'Student@123')}
-                className="px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] text-tealAccent-400 font-medium border border-slate-700 transition-colors"
+                onClick={() => fillQuickAccount('alan.turing@teacher.university.edu', 'EduCodeFaculty2026!')}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 hover:border-blue-500/50 flex flex-col items-start text-left transition-all group"
+                title="Faculty: alan.turing@teacher.university.edu"
               >
-                Student
+                <div className="flex items-center justify-between w-full mb-1">
+                  <span className="text-xs font-semibold text-blue-400 group-hover:text-blue-300">👨‍🏫 Faculty</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 font-mono">Teacher</span>
+                </div>
+                <span className="text-[11px] font-medium text-slate-200 truncate w-full">Dr. Alan Turing</span>
+                <span className="text-[9px] text-slate-400 truncate w-full">alan.turing@teacher...</span>
               </button>
+
               <button
                 type="button"
-                onClick={() => fillQuickAccount('teacher@university.edu', 'Teacher@123')}
-                className="px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] text-blue-400 font-medium border border-slate-700 transition-colors"
+                onClick={() => fillQuickAccount('teaching.assistant.bob@ta.university.edu', 'EduCodeTA2026!')}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 hover:border-amber-500/50 flex flex-col items-start text-left transition-all group"
+                title="Teaching Assistant: teaching.assistant.bob@ta.university.edu"
               >
-                Teacher
+                <div className="flex items-center justify-between w-full mb-1">
+                  <span className="text-xs font-semibold text-amber-400 group-hover:text-amber-300">🧑‍💻 TA</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 font-mono">TA</span>
+                </div>
+                <span className="text-[11px] font-medium text-slate-200 truncate w-full">Bob (Assistant)</span>
+                <span className="text-[9px] text-slate-400 truncate w-full">teaching.assistant...</span>
               </button>
+
               <button
                 type="button"
-                onClick={() => fillQuickAccount('admin@university.edu', 'Admin@123')}
-                className="px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] text-purple-400 font-medium border border-slate-700 transition-colors"
+                onClick={() => fillQuickAccount('stu-2026-001@student.university.edu', 'EduCodeStudent2026!')}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 hover:border-tealAccent-500/50 flex flex-col items-start text-left transition-all group"
+                title="Student: stu-2026-001@student.university.edu"
               >
-                Admin
+                <div className="flex items-center justify-between w-full mb-1">
+                  <span className="text-xs font-semibold text-tealAccent-400 group-hover:text-tealAccent-300">🎓 Student</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-tealAccent-500/10 text-tealAccent-300 font-mono">Student</span>
+                </div>
+                <span className="text-[11px] font-medium text-slate-200 truncate w-full">John Doe</span>
+                <span className="text-[9px] text-slate-400 truncate w-full">stu-2026-001@stud...</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fillQuickAccount('system.administrator@admin.university.edu', 'EduCodeAdmin2026!')}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 hover:border-purple-500/50 flex flex-col items-start text-left transition-all group"
+                title="Administrator: system.administrator@admin.university.edu"
+              >
+                <div className="flex items-center justify-between w-full mb-1">
+                  <span className="text-xs font-semibold text-purple-400 group-hover:text-purple-300">🛡️ Admin</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 font-mono">Admin</span>
+                </div>
+                <span className="text-[11px] font-medium text-slate-200 truncate w-full">Administrator</span>
+                <span className="text-[9px] text-slate-400 truncate w-full">system.administrator...</span>
               </button>
             </div>
           </div>
