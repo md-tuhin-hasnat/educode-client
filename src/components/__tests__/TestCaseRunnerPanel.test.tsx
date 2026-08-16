@@ -93,11 +93,15 @@ describe('TestCaseRunnerPanel Component', () => {
         summary={null}
         isRunning={false}
         onRunAll={handleRunAll}
+        timeLimitMs={2000}
+        memoryLimitMb={512}
       />
     );
 
     expect(screen.getByText('Test Suite Evaluation')).toBeInTheDocument();
-    const runBtn = screen.getByRole('button', { name: /run all test cases/i });
+    expect(screen.getByText('2s')).toBeInTheDocument();
+    expect(screen.getByText('512 MB')).toBeInTheDocument();
+    const runBtn = screen.getByRole('button', { name: /run all/i });
     expect(runBtn).toBeInTheDocument();
     fireEvent.click(runBtn);
     expect(handleRunAll).toHaveBeenCalledTimes(1);
@@ -119,5 +123,28 @@ describe('TestCaseRunnerPanel Component', () => {
     expect(screen.getByText('✅ pass 2/4 (30ms)')).toBeInTheDocument();
     expect(screen.getByText('✅ pass 3/4 (28ms)')).toBeInTheDocument();
     expect(screen.getByText('❌ wrong answer on test case 4')).toBeInTheDocument();
+  });
+
+  it('allows running only pretests when onRunCategory is provided', () => {
+    const handleRunCategory = jest.fn();
+    const testCasesWithPretests: TestCaseInput[] = [
+      { id: '1', order: 1, inputData: '1', expectedOutput: '1', points: 10, testType: 'SAMPLE' },
+      { id: '2', order: 2, inputData: '2', expectedOutput: '2', points: 10, testType: 'PRETEST' },
+    ];
+
+    render(
+      <TestCaseRunnerPanel
+        testCases={testCasesWithPretests}
+        summary={null}
+        isRunning={false}
+        onRunAll={jest.fn()}
+        onRunCategory={handleRunCategory}
+      />
+    );
+
+    const pretestBtn = screen.getByRole('button', { name: /run pretests/i });
+    expect(pretestBtn).toBeInTheDocument();
+    fireEvent.click(pretestBtn);
+    expect(handleRunCategory).toHaveBeenCalledWith('PRETEST');
   });
 });

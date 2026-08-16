@@ -60,8 +60,6 @@ interface TeacherTaskIDEProps {
 }
 
 export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
-  const checkerConfig = parseTaskWorkbenchMetadata(task?.description).checkerConfig || DEFAULT_CHECKER_CONFIG;
-
   const [ideSettings, setIdeSettings] = useState<IDESettings>(DEFAULT_SETTINGS);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isJavaPackageModalOpen, setIsJavaPackageModalOpen] = useState(false);
@@ -353,8 +351,13 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
     }
   };
 
-  // Run All Automated Evaluation Test Cases
-  const handleRunAllTests = async () => {
+  const workbenchMeta = parseTaskWorkbenchMetadata(task?.description);
+  const checkerConfig = workbenchMeta.checkerConfig || DEFAULT_CHECKER_CONFIG;
+  const timeLimitMs = task?.timeLimitMs || workbenchMeta.timeLimitMs || 1000;
+  const memoryLimitMb = task?.memoryLimitMb || workbenchMeta.memoryLimitMb || 256;
+
+  // Run Automated Evaluation Test Cases with category filtering
+  const handleRunCategory = async (category: 'ALL' | 'SAMPLE' | 'PRETEST' = 'ALL') => {
     if (isTesting || testCases.length === 0) return;
     setIsTesting(true);
     setIsBottomOpen(true);
@@ -390,8 +393,9 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
             };
           });
         },
-        10000,
-        checkerConfig
+        timeLimitMs,
+        checkerConfig,
+        category
       );
       setTestSummary(summary);
     } catch (err) {
@@ -400,6 +404,9 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
       setIsTesting(false);
     }
   };
+
+  const handleRunAllTests = () => handleRunCategory('ALL');
+
   const handleAddCustomTestCase = (tc: TestCaseInput) => {
     setTestCases((prev) => [...prev, tc]);
   };
@@ -925,8 +932,11 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
                       summary={testSummary}
                       isRunning={isTesting}
                       onRunAll={handleRunAllTests}
+                      onRunCategory={handleRunCategory}
                       onAddCustomTestCase={handleAddCustomTestCase}
                       checkerConfig={checkerConfig}
+                      timeLimitMs={timeLimitMs}
+                      memoryLimitMb={memoryLimitMb}
                     />
                   ) : (
                     <XtermTerminal />

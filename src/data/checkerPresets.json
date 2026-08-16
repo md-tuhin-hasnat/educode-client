@@ -1,0 +1,32 @@
+[
+  {
+    "id": "EXACT",
+    "label": "Exact Match (Whitespace Normalized)",
+    "description": "Standard token & line whitespace-normalized comparison.",
+    "badge": "Default"
+  },
+  {
+    "id": "FLOAT_TOLERANCE",
+    "label": "Float / Double Precision (|a - b| ≤ ε)",
+    "description": "Tolerates rounding & floating-point precision error up to ε (e.g. 1e-6).",
+    "badge": "Precision"
+  },
+  {
+    "id": "CASE_INSENSITIVE",
+    "label": "Case-Insensitive Match (Yes/No, True/False)",
+    "description": "Matches output ignoring letter casing (e.g. \"YES\" == \"yes\" == \"Yes\").",
+    "badge": "Case-Insensitive"
+  },
+  {
+    "id": "UNORDERED_TOKENS",
+    "label": "Unordered Token Multiset",
+    "description": "Verifies all tokens exist regardless of print order (e.g. all divisors).",
+    "badge": "Unordered"
+  },
+  {
+    "id": "CUSTOM_SCRIPT",
+    "label": "Custom Script Checker (Polygon / Testlib)",
+    "description": "Custom Python or C++ judge script for problems with multiple valid answers.",
+    "badge": "Custom Script"
+  }
+]

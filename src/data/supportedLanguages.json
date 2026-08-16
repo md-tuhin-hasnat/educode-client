@@ -1,0 +1,42 @@
+[
+  {
+    "id": "cpp",
+    "name": "C++ (G++ 17 / C++20)",
+    "shortName": "C++",
+    "extension": "cpp",
+    "monacoLanguage": "cpp",
+    "compiler": "g++ -std=c++17"
+  },
+  {
+    "id": "c",
+    "name": "C (GCC 11)",
+    "shortName": "C",
+    "extension": "c",
+    "monacoLanguage": "c",
+    "compiler": "gcc"
+  },
+  {
+    "id": "python",
+    "name": "Python 3.10+",
+    "shortName": "Python",
+    "extension": "py",
+    "monacoLanguage": "python",
+    "compiler": "python3"
+  },
+  {
+    "id": "java",
+    "name": "Java 17 (OpenJDK)",
+    "shortName": "Java",
+    "extension": "java",
+    "monacoLanguage": "java",
+    "compiler": "javac"
+  },
+  {
+    "id": "javascript",
+    "name": "JavaScript (Node.js)",
+    "shortName": "JavaScript",
+    "extension": "js",
+    "monacoLanguage": "javascript",
+    "compiler": "node"
+  }
+]

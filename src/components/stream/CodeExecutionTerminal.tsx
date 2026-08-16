@@ -15,6 +15,7 @@ import {
   faCode,
 } from '@fortawesome/free-solid-svg-icons';
 import { apiClient } from '@/config/api';
+import SUPPORTED_LANGUAGES_JSON from '@/data/supportedLanguages.json';
 
 interface CodeExecutionTerminalProps {
   initialCode: string;
@@ -96,11 +97,11 @@ export const CodeExecutionTerminal: React.FC<CodeExecutionTerminalProps> = ({
               onChange={(e) => setSelectedLang(e.target.value)}
               className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
             >
-              <option value="cpp">C++ (g++)</option>
-              <option value="c">C (gcc)</option>
-              <option value="python">Python 3</option>
-              <option value="java">Java</option>
-              <option value="javascript">JavaScript (Node)</option>
+              {SUPPORTED_LANGUAGES_JSON.map((lang) => (
+                <option key={lang.id} value={lang.id}>
+                  {lang.name}
+                </option>
+              ))}
             </select>
 
             <button

@@ -78,10 +78,10 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
 
   // Test Case Evaluation States
   const [testCases, setTestCases] = useState<TestCaseInput[]>([
-    { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false },
-    { id: '2', order: 2, inputData: '4\n10 20 30 40', expectedOutput: '40 30 20 10', points: 25, isHidden: false },
-    { id: '3', order: 3, inputData: '1\n42', expectedOutput: '42', points: 25, isHidden: false },
-    { id: '4', order: 4, inputData: '6\n1 9 2 8 3 7', expectedOutput: '7 3 8 2 9 1', points: 25, isHidden: true },
+    { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false, testType: 'SAMPLE' },
+    { id: '2', order: 2, inputData: '4\n10 20 30 40', expectedOutput: '40 30 20 10', points: 25, isHidden: false, testType: 'SAMPLE' },
+    { id: '3', order: 3, inputData: '1\n42', expectedOutput: '42', points: 25, isHidden: true, testType: 'PRETEST' },
+    { id: '4', order: 4, inputData: '6\n1 9 2 8 3 7', expectedOutput: '7 3 8 2 9 1', points: 25, isHidden: true, testType: 'PRETEST' },
   ]);
   const [testSummary, setTestSummary] = useState<TestSuiteSummary | null>(null);
   const [isTesting, setIsTesting] = useState(false);
@@ -675,8 +675,8 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
     }
   };
 
-  // Run All Automated Evaluation Test Cases
-  const handleRunAllTests = async () => {
+  // Run Automated Evaluation Test Cases with category filtering
+  const handleRunCategory = async (category: 'ALL' | 'SAMPLE' | 'PRETEST' = 'ALL') => {
     if (isTesting || testCases.length === 0) return;
     setIsTesting(true);
     setActiveTab('testcases');
@@ -714,8 +714,9 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
             };
           });
         },
-        10000,
-        checkerConfig
+        1000,
+        checkerConfig,
+        category
       );
       setTestSummary(summary);
     } catch (err) {
@@ -724,6 +725,8 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
       setIsTesting(false);
     }
   };
+
+  const handleRunAllTests = () => handleRunCategory('ALL');
 
   const handleAddCustomTestCase = (tc: TestCaseInput) => {
     setTestCases((prev) => [...prev, tc]);
@@ -940,6 +943,7 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
                     summary={testSummary}
                     isRunning={isTesting}
                     onRunAll={handleRunAllTests}
+                    onRunCategory={handleRunCategory}
                     onAddCustomTestCase={handleAddCustomTestCase}
                   />
                 </div>

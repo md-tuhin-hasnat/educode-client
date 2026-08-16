@@ -23,9 +23,13 @@ import {
   faFlask,
   faFloppyDisk,
   faScaleBalanced,
+  faClock,
+  faMicrochip,
+  faFilter,
+  faLayerGroup,
 } from '@fortawesome/free-solid-svg-icons';
 import api from '@/config/api';
-import TeacherTaskEngineeringIDE, { TestCaseItem } from '@/components/TeacherTaskEngineeringIDE';
+import TeacherTaskEngineeringIDE, { TestCaseItem, TestCaseCategory } from '@/components/TeacherTaskEngineeringIDE';
 import { WordMarkdownEditor } from '@/components/stream/WordMarkdownEditor';
 import {
   CheckerConfig,
@@ -50,6 +54,8 @@ export default function TeacherTaskNewPage() {
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'c' | 'cpp' | 'java' | 'python'>('cpp');
   const [maxPoints, setMaxPoints] = useState(100);
+  const [timeLimitMs, setTimeLimitMs] = useState<number>(1000);
+  const [memoryLimitMb, setMemoryLimitMb] = useState<number>(256);
   const [allowAutocomplete, setAllowAutocomplete] = useState(true);
   const [allowMultiFile, setAllowMultiFile] = useState(false);
 
@@ -67,9 +73,20 @@ export default function TeacherTaskNewPage() {
       expectedOutput: '31.415927',
       points: 25,
       isHidden: false,
+      testType: 'SAMPLE',
       order: 0,
     },
+    {
+      id: 2,
+      inputData: '10',
+      expectedOutput: '62.831853',
+      points: 25,
+      isHidden: true,
+      testType: 'PRETEST',
+      order: 1,
+    },
   ]);
+  const [testFilter, setTestFilter] = useState<'ALL' | 'SAMPLE' | 'PRETEST' | 'SYSTEM'>('ALL');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,7 +136,7 @@ export default function TeacherTaskNewPage() {
     }
   }, [courseId]);
 
-  const handleAddTestCase = () => {
+  const handleAddTestCase = (defaultCategory: TestCaseCategory = 'PRETEST') => {
     setTestCases([
       ...testCases,
       {
@@ -127,7 +144,8 @@ export default function TeacherTaskNewPage() {
         inputData: '',
         expectedOutput: '',
         points: 25,
-        isHidden: testCases.length > 0,
+        isHidden: defaultCategory !== 'SAMPLE',
+        testType: defaultCategory,
         order: testCases.length,
       },
     ]);
@@ -139,7 +157,16 @@ export default function TeacherTaskNewPage() {
 
   const handleUpdateTestCase = (index: number, field: keyof TestCaseItem, value: any) => {
     const updated = [...testCases];
-    updated[index] = { ...updated[index], [field]: value };
+    if (field === 'testType') {
+      const cat = value as TestCaseCategory;
+      updated[index] = {
+        ...updated[index],
+        testType: cat,
+        isHidden: cat !== 'SAMPLE',
+      };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
     setTestCases(updated);
   };
 
@@ -158,17 +185,23 @@ export default function TeacherTaskNewPage() {
         if (pkg.generatorCode) setGeneratorCode(pkg.generatorCode);
         if (pkg.templateCode) setTemplateCode(pkg.templateCode);
         if (pkg.checkerConfig) setCheckerConfig(pkg.checkerConfig);
+        if (pkg.timeLimitMs) setTimeLimitMs(Number(pkg.timeLimitMs) || 1000);
+        if (pkg.memoryLimitMb) setMemoryLimitMb(Number(pkg.memoryLimitMb) || 256);
         if (pkg.maxPoints) setMaxPoints(pkg.maxPoints);
         if (pkg.testCases && Array.isArray(pkg.testCases)) {
           setTestCases(
-            pkg.testCases.map((tc: any, idx: number) => ({
-              id: tc.id || idx + 1,
-              inputData: tc.inputData || '',
-              expectedOutput: tc.expectedOutput || '',
-              points: tc.points || 25,
-              isHidden: Boolean(tc.isHidden),
-              order: idx,
-            }))
+            pkg.testCases.map((tc: any, idx: number) => {
+              const cat: TestCaseCategory = tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE');
+              return {
+                id: tc.id || idx + 1,
+                inputData: tc.inputData || '',
+                expectedOutput: tc.expectedOutput || '',
+                points: tc.points || 25,
+                isHidden: cat !== 'SAMPLE',
+                testType: cat,
+                order: idx,
+              };
+            })
           );
         }
         alert('Task package imported successfully!');
@@ -185,6 +218,8 @@ export default function TeacherTaskNewPage() {
       title,
       description,
       language,
+      timeLimitMs,
+      memoryLimitMb,
       solutionCode,
       generatorCode,
       templateCode,
@@ -196,7 +231,8 @@ export default function TeacherTaskNewPage() {
         inputData: tc.inputData,
         expectedOutput: tc.expectedOutput,
         points: tc.points,
-        isHidden: tc.isHidden,
+        isHidden: tc.testType !== 'SAMPLE',
+        testType: tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE'),
         order: idx,
       })),
     };
@@ -223,6 +259,8 @@ export default function TeacherTaskNewPage() {
         generatorCode,
         templateCode,
         checkerConfig,
+        timeLimitMs,
+        memoryLimitMb,
       });
 
       const payload: any = {
@@ -232,13 +270,16 @@ export default function TeacherTaskNewPage() {
         language,
         taskType: 'assignment',
         maxPoints: Number(maxPoints) || 100,
+        timeLimitMs: Number(timeLimitMs) || 1000,
+        memoryLimitMb: Number(memoryLimitMb) || 256,
         allowAutocomplete,
         allowMultiFile,
         testCases: testCases.map((tc, idx) => ({
           inputData: tc.inputData,
           expectedOutput: tc.expectedOutput,
           points: Number(tc.points) || 10,
-          isHidden: Boolean(tc.isHidden),
+          isHidden: tc.testType ? tc.testType !== 'SAMPLE' : Boolean(tc.isHidden),
+          testType: tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE'),
           order: idx,
         })),
       };
@@ -420,6 +461,49 @@ export default function TeacherTaskNewPage() {
                   </p>
                 </div>
 
+                {/* Execution Limits (Time & Memory Limit) */}
+                <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-amber-300">
+                    <FontAwesomeIcon icon={faClock} />
+                    <span>Execution Limits</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Time Limit
+                      </label>
+                      <select
+                        value={timeLimitMs}
+                        onChange={(e) => setTimeLimitMs(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-amber-300 font-bold outline-none"
+                      >
+                        <option value={500}>0.5s (500ms)</option>
+                        <option value={1000}>1.0s (1000ms)</option>
+                        <option value={2000}>2.0s (2000ms)</option>
+                        <option value={3000}>3.0s (3000ms)</option>
+                        <option value={5000}>5.0s (5000ms)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Memory Limit
+                      </label>
+                      <select
+                        value={memoryLimitMb}
+                        onChange={(e) => setMemoryLimitMb(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-cyan-300 font-bold outline-none"
+                      >
+                        <option value={128}>128 MB</option>
+                        <option value={256}>256 MB</option>
+                        <option value={512}>512 MB</option>
+                        <option value={1024}>1024 MB</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Autocomplete Toggle */}
                 <label className="flex items-center justify-between p-3 rounded-2xl bg-slate-950/70 border border-slate-800 cursor-pointer">
                   <div className="space-y-0.5">
@@ -494,6 +578,10 @@ export default function TeacherTaskNewPage() {
             onTemplateCodeChange={setTemplateCode}
             checkerConfig={checkerConfig}
             onCheckerConfigChange={setCheckerConfig}
+            timeLimitMs={timeLimitMs}
+            onTimeLimitChange={setTimeLimitMs}
+            memoryLimitMb={memoryLimitMb}
+            onMemoryLimitChange={setMemoryLimitMb}
             testCases={testCases}
             onTestCasesChange={setTestCases}
           />
@@ -503,7 +591,7 @@ export default function TeacherTaskNewPage() {
         <div className="glass-panel p-6 md:p-8 rounded-3xl border border-slate-800 space-y-6 shadow-2xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
             <div>
-              <div className="flex items-center space-x-2.5">
+              <div className="flex items-center space-x-2.5 flex-wrap">
                 <h3 className="text-base font-extrabold text-white flex items-center space-x-2">
                   <FontAwesomeIcon icon={faVial} className="text-emerald-400" />
                   <span>Evaluation Test Cases Suite</span>
@@ -511,17 +599,60 @@ export default function TeacherTaskNewPage() {
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                   {testCases.length} Cases ({testCases.reduce((acc, t) => acc + (Number(t.points) || 0), 0)} pts)
                 </span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                  ⏱️ {timeLimitMs / 1000}s • 💾 {memoryLimitMb} MB
+                </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Evaluation test cases for student submissions evaluated with your configured checker.
+                Configure Samples (public in statement), Pretests (hidden input, runnable by students), and System Tests (final judge only).
               </p>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 flex-wrap">
+              {/* Category Filter Pills */}
+              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTestFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                    testFilter === 'ALL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  All ({testCases.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTestFilter('SAMPLE')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                    testFilter === 'SAMPLE' ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40' : 'text-emerald-400 hover:text-emerald-300'
+                  }`}
+                >
+                  🟢 Samples ({testCases.filter((t) => (t.testType || (!t.isHidden ? 'SAMPLE' : 'PRETEST')) === 'SAMPLE').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTestFilter('PRETEST')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                    testFilter === 'PRETEST' ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40' : 'text-amber-400 hover:text-amber-300'
+                  }`}
+                >
+                  🟡 Pretests ({testCases.filter((t) => (t.testType || (t.isHidden ? 'PRETEST' : 'SAMPLE')) === 'PRETEST').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTestFilter('SYSTEM')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                    testFilter === 'SYSTEM' ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40' : 'text-purple-400 hover:text-purple-300'
+                  }`}
+                >
+                  🟣 System ({testCases.filter((t) => t.testType === 'SYSTEM').length})
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={handleAddTestCase}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-lg shadow-emerald-600/30 transition-all"
+                onClick={() => handleAddTestCase('PRETEST')}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-lg shadow-emerald-600/30 transition-all"
               >
                 <FontAwesomeIcon icon={faPlus} />
                 <span>Add Test Case</span>
@@ -540,87 +671,116 @@ export default function TeacherTaskNewPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {testCases.map((tc, index) => (
-                <div
-                  key={tc.id || index}
-                  className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800/90 space-y-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold font-mono">
-                        #{index + 1}
-                      </span>
-                      <span className="text-xs font-bold text-white">Test Case #{index + 1}</span>
-                    </div>
+              {testCases
+                .map((tc, realIndex) => ({ tc, realIndex }))
+                .filter(({ tc }) => testFilter === 'ALL' || (tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE')) === testFilter)
+                .map(({ tc, realIndex }) => {
+                  const currentCat: TestCaseCategory = tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE');
+                  return (
+                    <div
+                      key={tc.id || realIndex}
+                      className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800/90 space-y-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center space-x-3">
+                          <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold font-mono">
+                            #{realIndex + 1}
+                          </span>
+                          <span className="text-xs font-bold text-white">Test Case #{realIndex + 1}</span>
 
-                    <div className="flex items-center space-x-3">
-                      {/* Hidden Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateTestCase(index, 'isHidden', !tc.isHidden)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 border transition-all ${
-                          tc.isHidden
-                            ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
-                            : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                        }`}
-                      >
-                        <FontAwesomeIcon icon={tc.isHidden ? faEyeSlash : faEye} className="text-[10px]" />
-                        <span>{tc.isHidden ? 'Hidden Test' : 'Visible Sample'}</span>
-                      </button>
+                          {/* 3-Way Category Selector */}
+                          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTestCase(realIndex, 'testType', 'SAMPLE')}
+                              className={`px-2 py-0.5 rounded font-bold transition-colors ${
+                                currentCat === 'SAMPLE'
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              🟢 Sample (Public)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTestCase(realIndex, 'testType', 'PRETEST')}
+                              className={`px-2 py-0.5 rounded font-bold transition-colors ${
+                                currentCat === 'PRETEST'
+                                  ? 'bg-amber-600 text-white'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              🟡 Pretest (Runnable)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTestCase(realIndex, 'testType', 'SYSTEM')}
+                              className={`px-2 py-0.5 rounded font-bold transition-colors ${
+                                currentCat === 'SYSTEM'
+                                  ? 'bg-purple-600 text-white'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              🟣 System Test (Judge Only)
+                            </button>
+                          </div>
+                        </div>
 
-                      {/* Points */}
-                      <div className="flex items-center space-x-1">
-                        <input
-                          type="number"
-                          min="1"
-                          value={tc.points}
-                          onChange={(e) => handleUpdateTestCase(index, 'points', Number(e.target.value))}
-                          className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white text-center font-bold"
-                        />
-                        <span className="text-xs text-slate-500 font-semibold">pts</span>
+                        <div className="flex items-center space-x-3">
+                          {/* Points */}
+                          <div className="flex items-center space-x-1">
+                            <input
+                              type="number"
+                              min="1"
+                              value={tc.points}
+                              onChange={(e) => handleUpdateTestCase(realIndex, 'points', Number(e.target.value))}
+                              className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white text-center font-bold"
+                            />
+                            <span className="text-xs text-slate-500 font-semibold">pts</span>
+                          </div>
+
+                          {/* Delete */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTestCase(realIndex)}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors text-xs"
+                          >
+                            <FontAwesomeIcon icon={faTrash} />
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Delete */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTestCase(index)}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors text-xs"
-                      >
-                        <FontAwesomeIcon icon={faTrash} />
-                      </button>
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                            Standard Input (stdin)
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={tc.inputData}
+                            onChange={(e) => handleUpdateTestCase(realIndex, 'inputData', e.target.value)}
+                            placeholder="Leave empty if no standard input is required..."
+                            className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 outline-none"
+                          />
+                        </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                        Standard Input (stdin)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={tc.inputData}
-                        onChange={(e) => handleUpdateTestCase(index, 'inputData', e.target.value)}
-                        placeholder="Leave empty if no standard input is required..."
-                        className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 outline-none"
-                      />
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                            Expected Output (stdout) <span className="text-rose-400">*</span>
+                          </label>
+                          <textarea
+                            rows={3}
+                            required
+                            value={tc.expectedOutput}
+                            onChange={(e) => handleUpdateTestCase(realIndex, 'expectedOutput', e.target.value)}
+                            placeholder="Exact expected standard output..."
+                            className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-400 outline-none"
+                          />
+                        </div>
+                      </div>
                     </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                        Expected Output (stdout) <span className="text-rose-400">*</span>
-                      </label>
-                      <textarea
-                        rows={3}
-                        required
-                        value={tc.expectedOutput}
-                        onChange={(e) => handleUpdateTestCase(index, 'expectedOutput', e.target.value)}
-                        placeholder="Exact expected standard output..."
-                        className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-400 outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
             </div>
           )}
         </div>

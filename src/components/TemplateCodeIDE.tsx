@@ -29,12 +29,9 @@ export interface TemplateCodeIDEProps {
   className?: string;
 }
 
-const DEFAULT_BOILERPLATES: Record<string, string> = {
-  c: `#include <stdio.h>\n\nint main() {\n    // Write your starter code here\n    printf("Hello, EduCode!\\n");\n    return 0;\n}\n`,
-  cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your starter code here\n    cout << "Hello, EduCode!" << endl;\n    return 0;\n}\n`,
-  java: `import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        // Write your starter code here\n        System.out.println("Hello, EduCode!");\n    }\n}\n`,
-  python: `def solve():\n    # Write your starter code here\n    print("Hello, EduCode!")\n\nif __name__ == "__main__":\n    solve()\n`,
-};
+import STARTER_TEMPLATES_JSON from '@/data/starterTemplates.json';
+
+const DEFAULT_BOILERPLATES: Record<string, string> = STARTER_TEMPLATES_JSON;
 
 const FILE_NAMES: Record<string, string> = {
   c: 'solution.c',

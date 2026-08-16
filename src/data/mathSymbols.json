@@ -1,0 +1,22 @@
+[
+  { "label": "r", "val": "r" },
+  { "label": "p = 2\\pi r", "val": "p = 2\\pi r" },
+  { "label": "O(N log N)", "val": "O(N \\log N)" },
+  { "label": "O(N²)", "val": "O(N^2)" },
+  { "label": "O(1)", "val": "O(1)" },
+  { "label": "a/b", "val": "\\frac{a}{b}" },
+  { "label": "√x", "val": "\\sqrt{x}" },
+  { "label": "∑", "val": "\\sum_{i=1}^{n} " },
+  { "label": "∏", "val": "\\prod_{i=1}^{n} " },
+  { "label": "∫", "val": "\\int_{a}^{b} " },
+  { "label": "≤", "val": "\\le " },
+  { "label": "≥", "val": "\\ge " },
+  { "label": "≠", "val": "\\ne " },
+  { "label": "≈", "val": "\\approx " },
+  { "label": "±", "val": "\\pm " },
+  { "label": "α", "val": "\\alpha " },
+  { "label": "β", "val": "\\beta " },
+  { "label": "θ", "val": "\\theta " },
+  { "label": "π", "val": "\\pi " },
+  { "label": "∞", "val": "\\infty " }
+]

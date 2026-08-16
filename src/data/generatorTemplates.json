@@ -1,0 +1,4 @@
+{
+  "python": "# Testcase Generator Script (Python 3)\n# Standard output will be used as the testcase input (stdin).\nimport random\nimport sys\n\ndef generate():\n    n = random.randint(1, 100)\n    print(n)\n    arr = [random.randint(1, 1000) for _ in range(n)]\n    print(*(arr))\n\nif __name__ == '__main__':\n    generate()\n",
+  "cpp": "// Testcase Generator Script (C++17)\n// Standard output will be used as the testcase input (stdin).\n#include <iostream>\n#include <random>\n#include <vector>\nusing namespace std;\n\nint main() {\n    mt19937_64 rng(random_device{}());\n    uniform_int_distribution<int> distN(1, 100);\n    uniform_int_distribution<int> distVal(1, 1000);\n    \n    int n = distN(rng);\n    cout << n << \"\\n\";\n    for (int i = 0; i < n; i++) {\n        cout << distVal(rng) << (i == n - 1 ? \"\" : \" \");\n    }\n    cout << \"\\n\";\n    return 0;\n}\n"
+}

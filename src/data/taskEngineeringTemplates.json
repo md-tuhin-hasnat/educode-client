@@ -1,0 +1,18 @@
+{
+  "solutions": {
+    "c": "#include <stdio.h>\n\nint main() {\n    int r;\n    if (scanf(\"%d\", &r) == 1) {\n        double perimeter = 2 * 3.141592653589793 * r;\n        printf(\"%.6f\\n\", perimeter);\n    }\n    return 0;\n}\n",
+    "cpp": "#include <iostream>\n#include <iomanip>\n\nint main() {\n    std::ios_base::sync_with_stdio(false);\n    std::cin.tie(NULL);\n\n    int r;\n    if (std::cin >> r) {\n        double perimeter = 2.0 * 3.141592653589793 * r;\n        std::cout << std::fixed << std::setprecision(6) << perimeter << \"\\n\";\n    }\n    return 0;\n}\n",
+    "java": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextInt()) {\n            int r = sc.nextInt();\n            double perimeter = 2.0 * Math.PI * r;\n            System.out.printf(\"%.6f\\n\", perimeter);\n        }\n    }\n}\n",
+    "python": "import math\nimport sys\n\ndef main():\n    line = sys.stdin.read().strip()\n    if not line:\n        return\n    r = int(line)\n    perimeter = 2.0 * math.pi * r\n    print(f\"{perimeter:.6f}\")\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  "generators": {
+    "python": "import random\n\n# Generate random input for the problem\ndef generate():\n    r = random.randint(1, 1000)\n    print(r)\n\nif __name__ == \"__main__\":\n    generate()\n",
+    "cpp": "#include <iostream>\n#include <random>\nusing namespace std;\n\nint main() {\n    mt19937_64 rng(random_device{}());\n    uniform_int_distribution<int> dist(1, 1000);\n    cout << dist(rng) << \"\\n\";\n    return 0;\n}\n"
+  },
+  "templates": {
+    "c": "#include <stdio.h>\n\nint main() {\n    // TODO: Read input from standard input (stdin)\n    // Print the computed result to standard output (stdout)\n    return 0;\n}\n",
+    "cpp": "#include <iostream>\n\nint main() {\n    // Fast I/O\n    std::ios_base::sync_with_stdio(false);\n    std::cin.tie(NULL);\n\n    // TODO: Implement solution logic here\n    return 0;\n}\n",
+    "java": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        // TODO: Read input from standard input\n        scanner.close();\n    }\n}\n",
+    "python": "import sys\n\ndef solve():\n    # TODO: Implement solution logic here\n    pass\n\nif __name__ == \"__main__\":\n    solve()\n"
+  }
+}

@@ -24,116 +24,22 @@ export interface CheckerConfig {
   customLanguage?: 'python' | 'cpp';
 }
 
+import CHECKER_PRESETS_DATA from '@/data/checkerPresets.json';
+import CHECKER_SCRIPTS_DATA from '@/data/checkerScripts.json';
+
 export function getPresetCheckerScript(
   type: CheckerType,
   floatTolerance: number = 1e-6
 ): string {
+  const scriptTemplate =
+    CHECKER_SCRIPTS_DATA[type as keyof typeof CHECKER_SCRIPTS_DATA] ||
+    CHECKER_SCRIPTS_DATA.EXACT;
+
   if (type === 'FLOAT_TOLERANCE') {
-    return `# Codeforces Polygon Checker: Float / Double Precision Tolerance
-# Allows absolute or relative error <= ${floatTolerance}
-def check(inf, ans, ouf):
-    jury_tokens = ans.strip().split()
-    user_tokens = ouf.strip().split()
-    
-    if len(user_tokens) != len(jury_tokens):
-        return False, f"Token count mismatch: expected {len(jury_tokens)}, found {len(user_tokens)}"
-    
-    EPS = ${floatTolerance}  # Floating point precision tolerance limit (eps)
-    for i, (j_tok, u_tok) in enumerate(zip(jury_tokens, user_tokens), start=1):
-        try:
-            j_val = float(j_tok)
-            u_val = float(u_tok)
-            abs_err = abs(u_val - j_val)
-            rel_err = abs_err / max(1.0, abs(j_val))
-            delta = min(abs_err, rel_err)
-            if delta > EPS:
-                return False, f"Token #{i} precision error: expected {j_tok}, found {u_tok} (delta {delta:.8f} > {EPS})"
-        except ValueError:
-            if j_tok != u_tok:
-                return False, f"Token #{i} mismatch: expected '{j_tok}', found '{u_tok}'"
-                
-    return True, f"Accepted: All floating-point values within tolerance {EPS}"
-`;
+    return scriptTemplate.split('__EPS__').join(String(floatTolerance));
   }
 
-  if (type === 'CASE_INSENSITIVE') {
-    return `# Codeforces Polygon Checker: Case-Insensitive Match (Yes/No / True/False)
-def check(inf, ans, ouf):
-    jury_tokens = ans.strip().split()
-    user_tokens = ouf.strip().split()
-    
-    if len(user_tokens) != len(jury_tokens):
-        return False, f"Token count mismatch: expected {len(jury_tokens)}, found {len(user_tokens)}"
-    
-    for i, (j_tok, u_tok) in enumerate(zip(jury_tokens, user_tokens), start=1):
-        if j_tok.lower() != u_tok.lower():
-            return False, f"Token #{i} mismatch: expected '{j_tok}', found '{u_tok}'"
-            
-    return True, "Accepted: Case-insensitive output matches jury answer"
-`;
-  }
-
-  if (type === 'UNORDERED_TOKENS') {
-    return `# Codeforces Polygon Checker: Unordered Token Multiset / Permutations
-from collections import Counter
-
-def check(inf, ans, ouf):
-    jury_tokens = ans.strip().split()
-    user_tokens = ouf.strip().split()
-    
-    if len(user_tokens) != len(jury_tokens):
-        return False, f"Token count mismatch: expected {len(jury_tokens)}, found {len(user_tokens)}"
-    
-    jury_counts = Counter(jury_tokens)
-    user_counts = Counter(user_tokens)
-    
-    if jury_counts != user_counts:
-        diff = jury_counts - user_counts
-        missing_item = next(iter(diff.keys())) if diff else "unknown"
-        return False, f"Multiset mismatch: missing token '{missing_item}'"
-        
-    return True, "Accepted: Unordered tokens match"
-`;
-  }
-
-  if (type === 'CUSTOM_SCRIPT') {
-    return `# Codeforces Polygon Style Custom Checker (Python)
-# Input parameters:
-#   inf: string representing testcase input (stdin)
-#   ans: string representing jury/reference expected output
-#   ouf: string representing participant/student output
-#
-# Return:
-#   (True, "OK message") for Accepted (AC)
-#   (False, "WA reason") for Wrong Answer (WA)
-
-def check(inf, ans, ouf):
-    user_lines = ouf.strip().splitlines()
-    jury_lines = ans.strip().splitlines()
-    
-    if not user_lines:
-        return False, "Participant output is empty"
-        
-    # Write custom verification logic below (e.g. graph path, coordinate bounds, multiple valid trees):
-    return True, "Accepted: Custom judge validation passed"
-`;
-  }
-
-  // EXACT
-  return `# Codeforces Polygon Checker: Standard Exact Match (whitespace-normalized)
-def check(inf, ans, ouf):
-    jury_tokens = ans.strip().split()
-    user_tokens = ouf.strip().split()
-    
-    if len(user_tokens) != len(jury_tokens):
-        return False, f"Token count mismatch: expected {len(jury_tokens)}, found {len(user_tokens)}"
-    
-    for i, (j_tok, u_tok) in enumerate(zip(jury_tokens, user_tokens), start=1):
-        if j_tok != u_tok:
-            return False, f"Token #{i} mismatch: expected '{j_tok}', found '{u_tok}'"
-            
-    return True, "Accepted: Exact match"
-`;
+  return scriptTemplate;
 }
 
 export const DEFAULT_CHECKER_CONFIG: CheckerConfig = {
@@ -148,38 +54,12 @@ export const CHECKER_PRESETS: Array<{
   label: string;
   description: string;
   badge: string;
-}> = [
-  {
-    id: 'EXACT',
-    label: 'Exact Match (Whitespace Normalized)',
-    description: 'Standard token & line whitespace-normalized comparison.',
-    badge: 'Default',
-  },
-  {
-    id: 'FLOAT_TOLERANCE',
-    label: 'Float / Double Precision (|a - b| ≤ ε)',
-    description: 'Tolerates rounding & floating-point precision error up to ε (e.g. 1e-6).',
-    badge: 'Precision',
-  },
-  {
-    id: 'CASE_INSENSITIVE',
-    label: 'Case-Insensitive Match (Yes/No, True/False)',
-    description: 'Matches output ignoring letter casing (e.g. "YES" == "yes" == "Yes").',
-    badge: 'Case-Insensitive',
-  },
-  {
-    id: 'UNORDERED_TOKENS',
-    label: 'Unordered Token Multiset',
-    description: 'Verifies all tokens exist regardless of print order (e.g. all divisors).',
-    badge: 'Unordered',
-  },
-  {
-    id: 'CUSTOM_SCRIPT',
-    label: 'Custom Script Checker (Polygon / Testlib)',
-    description: 'Custom Python or C++ judge script for problems with multiple valid answers.',
-    badge: 'Custom Script',
-  },
-];
+}> = CHECKER_PRESETS_DATA as Array<{
+  id: CheckerType;
+  label: string;
+  description: string;
+  badge: string;
+}>;
 
 export interface CheckerVerdict {
   passed: boolean;
@@ -443,10 +323,12 @@ export interface TaskWorkbenchMetadata {
   generatorCode?: string;
   templateCode?: string;
   checkerConfig?: CheckerConfig;
+  timeLimitMs?: number;    // Execution time limit in ms (default: 1000ms / 1.0s)
+  memoryLimitMb?: number;  // Memory limit in MB (default: 256MB)
 }
 
 /**
- * Serializes all teacher workbench engineering codes (solution, generator, template, checker)
+ * Serializes all teacher workbench engineering codes and limits (solution, generator, template, checker, limits)
  * into task description metadata comment.
  */
 export function serializeTaskWorkbenchMetadata(
@@ -463,13 +345,15 @@ export function serializeTaskWorkbenchMetadata(
     generatorCode: meta.generatorCode || '',
     templateCode: meta.templateCode || '',
     checkerConfig: meta.checkerConfig || DEFAULT_CHECKER_CONFIG,
+    timeLimitMs: meta.timeLimitMs ?? 1000,
+    memoryLimitMb: meta.memoryLimitMb ?? 256,
   });
 
   return `${cleanedDesc}\n\n<!--educode-task-meta:${metaJson}-->`.trim();
 }
 
 /**
- * Extracts all teacher workbench engineering codes (solution, generator, template, checker)
+ * Extracts all teacher workbench engineering codes and limits
  * from task description metadata comment.
  */
 export function parseTaskWorkbenchMetadata(
@@ -481,6 +365,8 @@ export function parseTaskWorkbenchMetadata(
       generatorCode: '',
       templateCode: '',
       checkerConfig: { ...DEFAULT_CHECKER_CONFIG },
+      timeLimitMs: 1000,
+      memoryLimitMb: 256,
     };
   }
 
@@ -494,6 +380,8 @@ export function parseTaskWorkbenchMetadata(
         generatorCode: parsed.generatorCode || '',
         templateCode: parsed.templateCode || '',
         checkerConfig: parsed.checkerConfig || { ...DEFAULT_CHECKER_CONFIG },
+        timeLimitMs: typeof parsed.timeLimitMs === 'number' ? parsed.timeLimitMs : 1000,
+        memoryLimitMb: typeof parsed.memoryLimitMb === 'number' ? parsed.memoryLimitMb : 256,
       };
     } catch {
       // ignore
@@ -515,6 +403,8 @@ export function parseTaskWorkbenchMetadata(
           customScript: parsed.customScript || DEFAULT_CHECKER_CONFIG.customScript,
           customLanguage: parsed.customLanguage || 'python',
         },
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
       };
     } catch {
       // ignore
@@ -526,6 +416,8 @@ export function parseTaskWorkbenchMetadata(
     generatorCode: '',
     templateCode: '',
     checkerConfig: { ...DEFAULT_CHECKER_CONFIG },
+    timeLimitMs: 1000,
+    memoryLimitMb: 256,
   };
 }
 

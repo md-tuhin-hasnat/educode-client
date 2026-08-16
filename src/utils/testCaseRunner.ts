@@ -5,6 +5,8 @@ import {
   DEFAULT_CHECKER_CONFIG,
 } from '@/utils/testCaseChecker';
 
+export type TestCaseCategory = 'SAMPLE' | 'PRETEST' | 'SYSTEM';
+
 export type TestCaseStatus =
   | 'PENDING'
   | 'RUNNING'
@@ -20,6 +22,7 @@ export interface TestCaseInput {
   expectedOutput: string;
   points?: number;
   isHidden?: boolean;
+  testType?: TestCaseCategory;
   order?: number;
 }
 
@@ -36,6 +39,7 @@ export interface TestCaseResult {
   maxPoints: number;
   errorDetails?: string;
   isHidden?: boolean;
+  testType?: TestCaseCategory;
   logMessage: string;
 }
 
@@ -88,9 +92,11 @@ export async function runSingleTestCase(
   language: string,
   workspaceFiles: WorkspaceFile[] = [],
   activeFilePath?: string,
-  timeoutMs: number = 10000,
+  timeoutMs: number = 2000,
   checkerConfig: CheckerConfig = DEFAULT_CHECKER_CONFIG
 ): Promise<TestCaseResult> {
+  const category: TestCaseCategory =
+    testCase.testType || (testCase.isHidden ? 'PRETEST' : 'SAMPLE');
   const maxPoints = testCase.points ?? 10;
   const orderNum = testCase.order ?? index + 1;
   const langKey = language.toLowerCase() as 'c' | 'cpp' | 'python' | 'java';
@@ -131,18 +137,25 @@ export async function runSingleTestCase(
     let errorDetails: string | undefined = undefined;
     let passed = false;
 
+    const testLabel =
+      category === 'PRETEST'
+        ? `pretest ${orderNum}`
+        : category === 'SYSTEM'
+        ? `system test ${orderNum}`
+        : `test case ${orderNum}`;
+
     if (compilationError || (exitCode !== 0 && stderr.toLowerCase().includes('error:'))) {
       status = 'COMPILATION_ERROR';
       errorDetails = compilationError || stderr;
-      logMessage = `compilation error on test case ${orderNum}`;
+      logMessage = `compilation error on ${testLabel}`;
     } else if (timedOut || timeMs >= timeoutMs) {
       status = 'TIME_LIMIT_EXCEEDED';
       errorDetails = `Execution exceeded time limit of ${timeoutMs / 1000}s`;
-      logMessage = `time limit exceeded on test case ${orderNum}`;
+      logMessage = `time limit exceeded on ${testLabel}`;
     } else if (exitCode !== 0) {
       status = 'RUNTIME_ERROR';
       errorDetails = stderr || `Process exited with code ${exitCode}`;
-      logMessage = `runtime error on test case ${orderNum}`;
+      logMessage = `runtime error on ${testLabel}`;
     } else {
       // Run Polygon-style checker evaluation
       const verdict = await evaluateTestCaseOutput(
@@ -155,13 +168,13 @@ export async function runSingleTestCase(
       if (verdict.passed) {
         status = 'PASSED';
         passed = true;
-        logMessage = `pass ${orderNum}/${total}`;
+        logMessage = `passed ${orderNum}/${total} (${category})`;
       } else {
         status = 'WRONG_ANSWER';
         errorDetails = verdict.diffDetails
           ? `${verdict.message}\n\n${verdict.diffDetails}`
           : verdict.message;
-        logMessage = `wrong answer on test case ${orderNum}`;
+        logMessage = `wrong answer on ${testLabel}`;
       }
     }
 
@@ -177,11 +190,14 @@ export async function runSingleTestCase(
       points: passed ? maxPoints : 0,
       maxPoints,
       errorDetails,
-      isHidden: testCase.isHidden,
+      isHidden: testCase.isHidden ?? (category !== 'SAMPLE'),
+      testType: category,
       logMessage,
     };
   } catch (err: any) {
     const errorDetails = err?.message || 'Execution failed';
+    const category: TestCaseCategory =
+      testCase.testType || (testCase.isHidden ? 'PRETEST' : 'SAMPLE');
     return {
       testCaseId: testCase.id,
       order: orderNum,
@@ -194,8 +210,9 @@ export async function runSingleTestCase(
       points: 0,
       maxPoints,
       errorDetails,
-      isHidden: testCase.isHidden,
-      logMessage: `error on test case ${orderNum}: ${errorDetails}`,
+      isHidden: testCase.isHidden ?? (category !== 'SAMPLE'),
+      testType: category,
+      logMessage: `error on test ${orderNum}: ${errorDetails}`,
     };
   }
 }
@@ -210,17 +227,25 @@ export async function runAllTestCases(
   workspaceFiles: WorkspaceFile[] = [],
   activeFilePath?: string,
   onProgress?: (progress: TestSuiteProgress) => void,
-  timeoutMs: number = 10000,
-  checkerConfig: CheckerConfig = DEFAULT_CHECKER_CONFIG
+  timeoutMs: number = 2000,
+  checkerConfig: CheckerConfig = DEFAULT_CHECKER_CONFIG,
+  categoryFilter: 'ALL' | 'SAMPLE' | 'PRETEST' | 'SYSTEM' = 'ALL'
 ): Promise<TestSuiteSummary> {
+  const targetCases =
+    categoryFilter === 'ALL'
+      ? testCases
+      : testCases.filter(
+          (tc) => (tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE')) === categoryFilter
+        );
+
   const results: TestCaseResult[] = [];
   const logs: string[] = [];
   let passedCount = 0;
   let failedCount = 0;
   let totalTimeMs = 0;
   let earnedPoints = 0;
-  const totalPoints = testCases.reduce((acc, t) => acc + (t.points ?? 10), 0);
-  const totalCount = testCases.length;
+  const totalPoints = targetCases.reduce((acc, t) => acc + (t.points ?? 10), 0);
+  const totalCount = targetCases.length;
 
   if (totalCount === 0) {
     return {
@@ -232,12 +257,16 @@ export async function runAllTestCases(
       totalTimeMs: 0,
       status: 'ALL_PASSED',
       results: [],
-      logs: ['No test cases configured for this task.'],
+      logs: [
+        categoryFilter === 'ALL'
+          ? 'No test cases configured for this task.'
+          : `No ${categoryFilter.toLowerCase()} test cases configured for this task.`,
+      ],
     };
   }
 
   for (let i = 0; i < totalCount; i++) {
-    const tc = testCases[i];
+    const tc = targetCases[i];
     const res = await runSingleTestCase(
       tc,
       i,

@@ -47,7 +47,7 @@ import {
   TestSuiteSummary,
   runAllTestCases,
 } from '@/utils/testCaseRunner';
-import { parseCheckerMetadata } from '@/utils/testCaseChecker';
+import { parseCheckerMetadata, parseTaskWorkbenchMetadata } from '@/utils/testCaseChecker';
 import TestCaseRunnerPanel from '@/components/TestCaseRunnerPanel';
 import { validateCodeSyntax, parseCompilerErrors, SyntaxMarker } from '@/utils/syntaxValidator';
 import type { Monaco } from '@monaco-editor/react';
@@ -779,8 +779,8 @@ export default function StudentSolvePage() {
     }
   };
 
-  // Run All Automated Evaluation Test Cases
-  const handleRunAllTests = async () => {
+  // Run Automated Evaluation Test Cases with category filtering
+  const handleRunCategory = async (category: 'ALL' | 'SAMPLE' | 'PRETEST' = 'ALL') => {
     if (!currentTask || !currentWorkspace || isTesting) return;
     setIsTesting(true);
     setActiveTab('testcases');
@@ -789,14 +789,16 @@ export default function StudentSolvePage() {
     const taskTestCases: TestCaseInput[] = (currentTask.testCases && currentTask.testCases.length > 0)
       ? currentTask.testCases
       : [
-          { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false },
-          { id: '2', order: 2, inputData: '3\n10 20 30', expectedOutput: '30 20 10', points: 25, isHidden: false },
-          { id: '3', order: 3, inputData: '1\n99', expectedOutput: '99', points: 25, isHidden: true },
-          { id: '4', order: 4, inputData: '4\n2 4 6 8', expectedOutput: '8 6 4 2', points: 25, isHidden: true },
+          { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false, testType: 'SAMPLE' },
+          { id: '2', order: 2, inputData: '3\n10 20 30', expectedOutput: '30 20 10', points: 25, isHidden: false, testType: 'SAMPLE' },
+          { id: '3', order: 3, inputData: '1\n99', expectedOutput: '99', points: 25, isHidden: true, testType: 'PRETEST' },
+          { id: '4', order: 4, inputData: '4\n2 4 6 8', expectedOutput: '8 6 4 2', points: 25, isHidden: true, testType: 'PRETEST' },
         ];
 
     try {
-      const checkerConfig = parseCheckerMetadata(currentTask.description);
+      const workbenchMeta = parseTaskWorkbenchMetadata(currentTask.description);
+      const checkerConfig = workbenchMeta.checkerConfig || parseCheckerMetadata(currentTask.description);
+      const timeLimitMs = currentTask.timeLimitMs || workbenchMeta.timeLimitMs || 1000;
 
       const summary = await runAllTestCases(
         taskTestCases,
@@ -831,8 +833,9 @@ export default function StudentSolvePage() {
             };
           });
         },
-        10000,
-        checkerConfig
+        timeLimitMs,
+        checkerConfig,
+        category
       );
       setTestSummaries((prev) => ({ ...prev, [currentTask.id]: summary }));
     } catch (err) {
@@ -841,6 +844,8 @@ export default function StudentSolvePage() {
       setIsTesting(false);
     }
   };
+
+  const handleRunAllTests = () => handleRunCategory('ALL');
 
   const handleAddCustomTestCase = (tc: TestCaseInput) => {
     if (!currentTask) return;
@@ -1053,27 +1058,37 @@ export default function StudentSolvePage() {
                 <div className="flex-1 -m-5 flex flex-col h-full overflow-hidden">
                   <TestCaseRunnerPanel
                     testCases={currentTask.testCases && currentTask.testCases.length > 0 ? currentTask.testCases : [
-                      { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false },
-                      { id: '2', order: 2, inputData: '3\n10 20 30', expectedOutput: '30 20 10', points: 25, isHidden: false },
-                      { id: '3', order: 3, inputData: '1\n99', expectedOutput: '99', points: 25, isHidden: true },
-                      { id: '4', order: 4, inputData: '4\n2 4 6 8', expectedOutput: '8 6 4 2', points: 25, isHidden: true },
+                      { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false, testType: 'SAMPLE' },
+                      { id: '2', order: 2, inputData: '3\n10 20 30', expectedOutput: '30 20 10', points: 25, isHidden: false, testType: 'SAMPLE' },
+                      { id: '3', order: 3, inputData: '1\n99', expectedOutput: '99', points: 25, isHidden: true, testType: 'PRETEST' },
+                      { id: '4', order: 4, inputData: '4\n2 4 6 8', expectedOutput: '8 6 4 2', points: 25, isHidden: true, testType: 'PRETEST' },
                     ]}
                     summary={testSummaries[currentTask.id] || null}
                     isRunning={isTesting}
                     onRunAll={handleRunAllTests}
+                    onRunCategory={handleRunCategory}
                     onAddCustomTestCase={handleAddCustomTestCase}
-                    checkerConfig={parseCheckerMetadata(currentTask.description)}
+                    checkerConfig={parseTaskWorkbenchMetadata(currentTask.description).checkerConfig || parseCheckerMetadata(currentTask.description)}
+                    timeLimitMs={currentTask.timeLimitMs || parseTaskWorkbenchMetadata(currentTask.description).timeLimitMs || 1000}
+                    memoryLimitMb={currentTask.memoryLimitMb || parseTaskWorkbenchMetadata(currentTask.description).memoryLimitMb || 256}
                   />
                 </div>
               ) : activeTab === 'problem' ? (
                 <div className="space-y-4 prose prose-invert max-w-none">
                   <h2 className="text-lg font-bold text-white m-0">{currentTask.title}</h2>
-                  <div className="flex space-x-2 text-[11px]">
+                  <div className="flex flex-wrap gap-2 text-[11px]">
                     <span className="px-2 py-1 bg-slate-800 rounded border border-slate-700 text-slate-300 capitalize font-medium">
                       {currentTask.difficulty || 'Medium'}
                     </span>
                     <span className="px-2 py-1 bg-slate-800 rounded border border-slate-700 text-slate-300 font-medium">
                       {currentTask.points || 100} Points
+                    </span>
+                    <span className="px-2 py-1 bg-amber-500/10 rounded border border-amber-500/30 text-amber-300 font-bold flex items-center space-x-1">
+                      <FontAwesomeIcon icon={faClock} className="text-[10px]" />
+                      <span>Time Limit: {(currentTask.timeLimitMs || parseTaskWorkbenchMetadata(currentTask.description).timeLimitMs || 1000) / 1000}s</span>
+                    </span>
+                    <span className="px-2 py-1 bg-cyan-500/10 rounded border border-cyan-500/30 text-cyan-300 font-bold">
+                      Memory Limit: {currentTask.memoryLimitMb || parseTaskWorkbenchMetadata(currentTask.description).memoryLimitMb || 256} MB
                     </span>
                   </div>
 
