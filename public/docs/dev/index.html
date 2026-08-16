@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduCode Platform — Developer Documentation & Architecture Guide</title>
+  <meta name="description" content="Comprehensive engineering and developer documentation for the EduCode automated coding, examination, and classroom platform.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #020617;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    code, pre {
+      font-family: 'Fira Code', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-purple-500 selection:text-white">
+
+  <!-- Header Navigation -->
+  <header class="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-6 py-3.5 flex items-center justify-between">
+    <div class="flex items-center space-x-4">
+      <a href="/" class="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors text-sm font-medium">
+        <i class="fa-solid fa-arrow-left text-xs"></i>
+        <span>Back to App</span>
+      </a>
+      <div class="h-4 w-px bg-slate-800"></div>
+      <div class="flex items-center space-x-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-600/30">
+          <i class="fa-solid fa-book text-white text-sm"></i>
+        </div>
+        <div>
+          <span class="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-300 text-base tracking-tight">
+            EduCode
+          </span>
+          <span class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+            Developer Docs v2.4 (HTML)
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-3">
+      <div class="relative">
+        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+        <input
+          type="text"
+          id="docsSearch"
+          placeholder="Search docs (Ctrl+K)..."
+          class="w-64 bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
+          onkeyup="filterDocs()"
+        />
+      </div>
+      <a href="/docs/dev" class="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-lg shadow-purple-600/20 flex items-center space-x-1.5 transition-all">
+        <span>Interactive Next.js App</span>
+        <i class="fa-solid fa-bolt text-[10px]"></i>
+      </a>
+    </div>
+  </header>
+
+  <!-- Horizontal Quick-Jump Bar -->
+  <div class="bg-slate-900/60 border-b border-slate-800/80 px-6 py-2.5 overflow-x-auto">
+    <div class="max-w-5xl mx-auto flex items-center space-x-2 text-xs">
+      <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 mr-2 flex-shrink-0">
+        Sections:
+      </span>
+      <div class="flex items-center space-x-2 overflow-x-auto pb-1" id="navLinks">
+        <a href="#overview" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-network-wired text-purple-400 text-[11px]"></i>
+          <span>Architecture Overview</span>
+        </a>
+        <a href="#project-structure" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-folder-open text-emerald-400 text-[11px]"></i>
+          <span>Modular Structure</span>
+        </a>
+        <a href="#client-subsystems" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-layer-group text-blue-400 text-[11px]"></i>
+          <span>Client Subsystems</span>
+        </a>
+        <a href="#server-execution" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-server text-amber-400 text-[11px]"></i>
+          <span>Execution Engine</span>
+        </a>
+        <a href="#test-case-engine" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-vial text-pink-400 text-[11px]"></i>
+          <span>Test Suites & Checkers</span>
+        </a>
+        <a href="#json-datasets" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-boxes-stacked text-cyan-400 text-[11px]"></i>
+          <span>JSON Configs</span>
+        </a>
+        <a href="#api-reference" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-code text-violet-400 text-[11px]"></i>
+          <span>REST API</span>
+        </a>
+        <a href="#database-schema" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-database text-teal-400 text-[11px]"></i>
+          <span>Database</span>
+        </a>
+        <a href="#development-commands" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-terminal text-emerald-400 text-[11px]"></i>
+          <span>Dev Commands</span>
+        </a>
+        <a href="#security-rbac" class="flex items-center space-x-1.5 px-3 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium flex-shrink-0">
+          <i class="fa-solid fa-shield-halved text-red-400 text-[11px]"></i>
+          <span>Security & Roles</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layout Container (Single-Column) -->
+  <div class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Main Content Area -->
+    <main class="space-y-16 pb-24" id="mainDocContent">
+      
+      <!-- Section 1: Overview -->
+      <section id="overview" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold">
+          <i class="fa-solid fa-network-wired"></i>
+          <span>Architecture Overview</span>
+        </div>
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+          EduCode Platform Architecture & Engineering Manual
+        </h1>
+        <p class="text-slate-300 leading-relaxed text-sm sm:text-base">
+          EduCode is a production-grade automated coding, examination, and computer science education system. It unifies classroom stream feeds, interactive LaTeX formula editing, Monaco IDE code cell execution, competitive-programming problem authoring (with Codeforces/Polygon custom checkers), sandboxed compilation, and real-time plagiarism detection.
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-purple-500/40 transition-colors">
+            <div class="text-purple-400 font-bold text-sm mb-1 flex items-center space-x-2">
+              <i class="fa-solid fa-desktop"></i>
+              <span>Frontend Client</span>
+            </div>
+            <div class="text-xs text-slate-400">Next.js 14 (App Router), React 18, Tailwind CSS, Monaco Editor, KaTeX LaTeX formulas, Socket.IO.</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/40 transition-colors">
+            <div class="text-emerald-400 font-bold text-sm mb-1 flex items-center space-x-2">
+              <i class="fa-solid fa-server"></i>
+              <span>Backend API Server</span>
+            </div>
+            <div class="text-xs text-slate-400">NestJS framework, Prisma ORM, PostgreSQL database, Subprocess sandboxing daemon, WebSocket Gateway.</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/40 transition-colors">
+            <div class="text-cyan-400 font-bold text-sm mb-1 flex items-center space-x-2">
+              <i class="fa-solid fa-microchip"></i>
+              <span>Judge & Runner Lab</span>
+            </div>
+            <div class="text-xs text-slate-400">Time & memory limits, 3-way test suite (Sample, Pretest, System), Float tolerance, Token multiset & Polygon scripts.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Project Structure -->
+      <section id="project-structure" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+          <i class="fa-solid fa-folder-open"></i>
+          <span>Repository Architecture</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          Modular Project Directory
+        </h2>
+        <p class="text-sm text-slate-300">
+          The codebase is organized cleanly into modular folders where monolithic views are decomposed into dedicated subcomponents with separated types:
+        </p>
+
+        <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-xs shadow-lg">
+          <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-slate-400 text-[11px]">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
+              <span class="ml-2 font-semibold text-slate-300">Monorepo Layout</span>
+            </div>
+            <button onclick="copyCode(this)" class="text-slate-400 hover:text-emerald-400 transition-colors flex items-center space-x-1">
+              <i class="fa-solid fa-copy"></i>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre class="p-4 overflow-x-auto text-slate-300 leading-relaxed"><code>coding lab/
+├── educode-client/                     # Next.js 14 Frontend Application
+│   ├── src/
+│   │   ├── app/                        # Next.js routes (student, teacher, admin, docs/dev)
+│   │   ├── components/
+│   │   │   ├── task-engineering/       # Task Engineering IDE subcomponents
+│   │   │   │   ├── types.ts            # Shared tab types, test categories, limits
+│   │   │   │   ├── TaskEngineeringHeader.tsx
+│   │   │   │   ├── SolutionEditorTab.tsx
+│   │   │   │   ├── GeneratorEditorTab.tsx
+│   │   │   │   ├── CheckerEditorTab.tsx
+│   │   │   │   ├── TemplateEditorTab.tsx
+│   │   │   │   ├── TestSuiteMatrixTab.tsx
+│   │   │   │   └── ProblemPreviewPane.tsx
+│   │   │   ├── test-runner/            # Automated Test Runner Panel subcomponents
+│   │   │   │   ├── types.ts
+│   │   │   │   ├── TestCaseFilterBar.tsx
+│   │   │   │   ├── TestCaseResultCard.tsx
+│   │   │   │   ├── AddCustomTestCaseModal.tsx
+│   │   │   │   └── LiveTestLogsView.tsx
+│   │   │   ├── stream/editor/          # Word & Markdown Document Editor subcomponents
+│   │   │   │   ├── types.ts
+│   │   │   │   ├── editorUtils.ts
+│   │   │   │   ├── EditorToolbar.tsx
+│   │   │   │   ├── RichTextCell.tsx
+│   │   │   │   ├── CodeCellCard.tsx
+│   │   │   │   └── LatexEquationModal.tsx
+│   │   │   ├── classroom/              # Classroom Hub tabs and modals
+│   │   │   │   ├── types.ts
+│   │   │   │   ├── ClassroomHeaderNav.tsx
+│   │   │   │   ├── ClassroomStreamTab.tsx
+│   │   │   │   ├── ClassroomClassworkTab.tsx
+│   │   │   │   ├── ClassroomMaterialsTab.tsx
+│   │   │   │   ├── ClassroomPeopleTab.tsx
+│   │   │   │   ├── ClassroomGradesTab.tsx
+│   │   │   │   ├── CreateAssessmentModal.tsx
+│   │   │   │   └── CreateMaterialModal.tsx
+│   │   │   └── themes.ts               # Monaco theme registrar & VS Code JSON parser
+│   │   ├── data/                       # Decoupled JSON data files
+│   │   │   ├── mathSymbols.json        # Quick LaTeX symbols & formulas
+│   │   │   ├── checkerPresets.json     # Polygon checker preset configs
+│   │   │   ├── checkerScripts.json     # Python verification judge scripts
+│   │   │   ├── taskEngineeringTemplates.json # Authoring reference solutions & generators
+│   │   │   ├── starterTemplates.json   # Language boilerplates (C++, C, Python, Java, JS)
+│   │   │   ├── generatorTemplates.json # Random test case generator scripts
+│   │   │   ├── supportedLanguages.json # Languages metadata & compiler flags
+│   │   │   └── monacoThemes.json       # Editor color themes & syntax rules
+│   │   └── utils/
+│   │       ├── testCaseChecker.ts      # Client-side Polygon evaluation engine
+│   │       ├── testCaseRunner.ts       # Subprocess testcase execution runner
+│   │       ├── mathRenderer.ts        # KaTeX LaTeX HTML formula serializer
+│   │       └── syntaxValidator.ts     # Real-time static syntax validator
+│   └── public/
+│       └── docs/dev/index.html         # Standalone HTML Developer Documentation
+│
+├── educode-server/                     # NestJS Backend API & Judge Daemon
+│   ├── src/
+│   │   ├── modules/
+│   │   │   ├── auth/                   # JWT Auth, bcrypt hashing, RolesGuard
+│   │   │   ├── classroom/              # Courses, Assessments, Tasks, Grades
+│   │   │   ├── stream/                 # Posts, Comments, WebSockets
+│   │   │   │   ├── code-execution.service.ts # Sandboxed compilation & process runner
+│   │   │   │   ├── stream.service.ts
+│   │   │   │   └── stream.gateway.ts
+│   │   │   ├── submissions/            # Submission queue & batch grading
+│   │   │   └── plagiarism/             # Token-based AST similarity analyzer
+│   │   └── prisma/
+│   │       └── schema.prisma           # Relational schema (User, Course, Task, TestCase, etc.)</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 3: Client Subsystems -->
+      <section id="client-subsystems" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold">
+          <i class="fa-solid fa-layer-group"></i>
+          <span>Client Architecture</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          Client Modular Subsystems
+        </h2>
+        <p class="text-sm text-slate-300">
+          The client architecture delegates responsibilities to dedicated subcomponents:
+        </p>
+
+        <div class="space-y-4">
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+            <div class="flex items-center space-x-2 text-purple-400 font-bold text-sm">
+              <i class="fa-solid fa-sliders"></i>
+              <span>1. Task Engineering IDE (<code class="text-xs">components/task-engineering/</code>)</span>
+            </div>
+            <p class="text-xs text-slate-400">
+              Allows instructors to author problem reference solutions, random test generators, Codeforces-style custom checkers, starter code templates, and manage the full test suite matrix with 3-way test categories (<code class="text-purple-300">SAMPLE</code>, <code class="text-blue-300">PRETEST</code>, <code class="text-emerald-300">SYSTEM</code>).
+            </p>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+            <div class="flex items-center space-x-2 text-emerald-400 font-bold text-sm">
+              <i class="fa-solid fa-vial"></i>
+              <span>2. Test Runner Panel (<code class="text-xs">components/test-runner/</code>)</span>
+            </div>
+            <p class="text-xs text-slate-400">
+              Executes student code against test cases, streams execution logs, calculates CPU time and memory consumption, displays expected vs actual output diffs, and hides private system tests.
+            </p>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+            <div class="flex items-center space-x-2 text-cyan-400 font-bold text-sm">
+              <i class="fa-solid fa-file-code"></i>
+              <span>3. Word & Markdown Editor (<code class="text-xs">components/stream/editor/</code>)</span>
+            </div>
+            <p class="text-xs text-slate-400">
+              A Notion/Word style multi-block content editor supporting inline rich text, interactive KaTeX LaTeX formulas, runnable Monaco code cells with live stdin/stdout, and @mention autocomplete.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: Sandboxed Code Execution -->
+      <section id="server-execution" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+          <i class="fa-solid fa-server"></i>
+          <span>Execution Engine</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          Sandboxed Subprocess Code Execution
+        </h2>
+        <p class="text-sm text-slate-300">
+          The backend encapsulates all compilation and execution logic in <code class="text-amber-400 font-mono text-xs">CodeExecutionService</code> (<code class="text-xs">code-execution.service.ts</code>). It compiles C/C++/Java and runs Python/JavaScript in an isolated temporary working directory with strict timeouts and resource cleanup.
+        </p>
+
+        <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-xs shadow-lg">
+          <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-slate-400 text-[11px]">
+            <span class="font-semibold text-slate-300">educode-server/src/modules/stream/code-execution.service.ts</span>
+            <button onclick="copyCode(this)" class="text-slate-400 hover:text-emerald-400 transition-colors flex items-center space-x-1">
+              <i class="fa-solid fa-copy"></i>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre class="p-4 overflow-x-auto text-slate-300 leading-relaxed"><code>@Injectable()
+export class CodeExecutionService {
+  async executeCode(dto: ExecuteCodeDto): Promise&lt;ExecutionResult&gt; {
+    const tempDir = path.join(
+      process.cwd(),
+      'tmp_runner',
+      `exec_\${Date.now()}_\${Math.random().toString(36).substring(7)}`,
+    );
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    const startTime = Date.now();
+    let stdout = '', stderr = '', exitCode = 0;
+    const lang = dto.language.toLowerCase() as Language;
+
+    try {
+      if (lang === 'cpp') {
+        const srcPath = path.join(tempDir, 'main.cpp');
+        const binPath = path.join(tempDir, 'main_bin');
+        fs.writeFileSync(srcPath, dto.code);
+
+        // Compile with GCC C++17
+        const compileRes = await execPromise(`g++ -std=c++17 "\${srcPath}" -o "\${binPath}"`, { cwd: tempDir })
+          .catch(err =&gt; ({ stdout: '', stderr: err.stderr || err.message }));
+
+        if (compileRes.stderr && !fs.existsSync(binPath)) {
+          stderr = `[Compilation Error]\\n\${compileRes.stderr}`;
+          exitCode = 1;
+        } else {
+          const runRes = await this.runCommandWithInput(`"\${binPath}"`, tempDir, dto.input, dto.timeoutMs);
+          stdout = runRes.stdout;
+          stderr = runRes.stderr;
+        }
+      }
+      // ... C, Python, Java, JavaScript
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+
+    return { stdout: stdout.trimEnd(), stderr: stderr.trimEnd(), exitCode, durationMs: Date.now() - startTime };
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 5: 3-Way Test Suite & Checkers -->
+      <section id="test-case-engine" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-pink-500/10 border border-pink-500/30 text-pink-300 text-xs font-semibold">
+          <i class="fa-solid fa-vial"></i>
+          <span>Judge Lab</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          3-Way Test Suite Categories & Polygon Checkers
+        </h2>
+        <p class="text-sm text-slate-300">
+          Test cases are categorized into three distinct tiers:
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="p-4 rounded-2xl bg-slate-900 border border-emerald-500/30">
+            <div class="text-emerald-400 font-bold text-sm flex items-center space-x-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>1. Sample Tests</span>
+            </div>
+            <div class="text-xs text-slate-300 mt-2">
+              Publicly visible on the problem statement. Students can view both standard input and expected output directly.
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900 border border-blue-500/30">
+            <div class="text-blue-400 font-bold text-sm flex items-center space-x-1.5">
+              <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+              <span>2. Pretests</span>
+            </div>
+            <div class="text-xs text-slate-300 mt-2">
+              Hidden during problem view, but students have the option to execute them before submitting. Diagnostic verdicts (AC/WA) are returned without revealing private data.
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900 border border-purple-500/30">
+            <div class="text-purple-400 font-bold text-sm flex items-center space-x-1.5">
+              <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+              <span>3. System Tests</span>
+            </div>
+            <div class="text-xs text-slate-300 mt-2">
+              Private grading test cases. Inaccessible by students and executed exclusively upon final assignment/exam submission.
+            </div>
+          </div>
+        </div>
+
+        <h3 class="text-lg font-bold text-white pt-4">Supported Checker Types</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border border-slate-800 rounded-xl overflow-hidden">
+            <thead class="bg-slate-900 text-slate-400 font-bold">
+              <tr>
+                <th class="p-3 border-b border-slate-800">Checker ID</th>
+                <th class="p-3 border-b border-slate-800">Description</th>
+                <th class="p-3 border-b border-slate-800">Tolerance / Rules</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/80 bg-slate-950/60 font-mono text-[11px]">
+              <tr>
+                <td class="p-3 text-purple-400 font-bold">EXACT</td>
+                <td class="p-3 text-slate-300">Exact token & whitespace-normalized comparison</td>
+                <td class="p-3 text-slate-400">Token-by-token equality</td>
+              </tr>
+              <tr>
+                <td class="p-3 text-emerald-400 font-bold">FLOAT_TOLERANCE</td>
+                <td class="p-3 text-slate-300">Floating-point / double precision error tolerance</td>
+                <td class="p-3 text-slate-400">|a - b| ≤ ε or |a - b| / max(1, |a|) ≤ ε (default 1e-6)</td>
+              </tr>
+              <tr>
+                <td class="p-3 text-blue-400 font-bold">CASE_INSENSITIVE</td>
+                <td class="p-3 text-slate-300">Case-insensitive output match (YES/yes, True/true)</td>
+                <td class="p-3 text-slate-400">token.lower() == expected.lower()</td>
+              </tr>
+              <tr>
+                <td class="p-3 text-amber-400 font-bold">UNORDERED_TOKENS</td>
+                <td class="p-3 text-slate-300">Order-independent token multiset verification</td>
+                <td class="p-3 text-slate-400">Counter(actual) == Counter(expected)</td>
+              </tr>
+              <tr>
+                <td class="p-3 text-pink-400 font-bold">CUSTOM_SCRIPT</td>
+                <td class="p-3 text-slate-300">Polygon custom Python judge script</td>
+                <td class="p-3 text-slate-400">def check(inf, ans, ouf) -&gt; (bool, msg)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section 6: JSON Datasets -->
+      <section id="json-datasets" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold">
+          <i class="fa-solid fa-boxes-stacked"></i>
+          <span>Configuration Datasets</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          JSON Configuration Files
+        </h2>
+        <p class="text-sm text-slate-300">
+          All static templates, presets, and language metadata are externalized into JSON files located in <code class="text-cyan-400 font-mono text-xs">src/data/</code>:
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="font-bold text-cyan-400 font-mono">mathSymbols.json</span>
+            <p class="text-slate-400 text-[11px] mt-1">LaTeX symbols, calculus operators, asymptotic complexities.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="font-bold text-cyan-400 font-mono">checkerPresets.json</span>
+            <p class="text-slate-400 text-[11px] mt-1">Validation rules, descriptions, and UI badges for checkers.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="font-bold text-cyan-400 font-mono">checkerScripts.json</span>
+            <p class="text-slate-400 text-[11px] mt-1">Python judge scripts for exact, float, and multiset verification.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="font-bold text-cyan-400 font-mono">starterTemplates.json</span>
+            <p class="text-slate-400 text-[11px] mt-1">Default skeleton code for C++, C, Python, Java, and JS.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="font-bold text-cyan-400 font-mono">taskEngineeringTemplates.json</span>
+            <p class="text-slate-400 text-[11px] mt-1">Reference solutions, generator scripts, and starter code for authoring.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="font-bold text-cyan-400 font-mono">monacoThemes.json</span>
+            <p class="text-slate-400 text-[11px] mt-1">Monaco dark/light syntax themes and editor UI styling tokens.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 7: REST API & WebSockets -->
+      <section id="api-reference" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 text-xs font-semibold">
+          <i class="fa-solid fa-code"></i>
+          <span>API Reference</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          REST API Endpoints & Real-time WebSockets
+        </h2>
+
+        <div class="space-y-3 text-xs">
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 font-mono">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">POST</span>
+              <span class="text-slate-200">/api/stream/execute</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-2">
+              Executes code in sandbox. Request body: <code class="text-purple-300">{ code, language, input, timeoutMs }</code>
+            </div>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 font-mono">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">GET</span>
+              <span class="text-slate-200">/api/tasks/:id/testcases</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-2">
+              Retrieves testcases for a task. Filtered according to caller role (faculty/student).
+            </div>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 font-mono">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">POST</span>
+              <span class="text-slate-200">/api/submissions/submit</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-2">
+              Submits student solution for automated grading against full system test suite.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 8: Database & Prisma Models -->
+      <section id="database-schema" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300 text-xs font-semibold">
+          <i class="fa-solid fa-database"></i>
+          <span>Database Schema</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          Prisma Database Schema
+        </h2>
+
+        <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-xs shadow-lg">
+          <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-slate-400 text-[11px]">
+            <span class="font-semibold text-slate-300">educode-server/prisma/schema.prisma</span>
+            <button onclick="copyCode(this)" class="text-slate-400 hover:text-emerald-400 transition-colors flex items-center space-x-1">
+              <i class="fa-solid fa-copy"></i>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre class="p-4 overflow-x-auto text-slate-300 leading-relaxed"><code>model Task {
+  id              String         @id @default(uuid())
+  title           String
+  description     String
+  timeLimitMs     Int            @default(2000)
+  memoryLimitMb   Int            @default(256)
+  allowedLanguage String?        @default("Any")
+  starterCode     String?
+  solutionCode    String?
+  generatorCode   String?
+  checkerType     String         @default("EXACT")
+  floatTolerance  Float?         @default(0.000001)
+  customChecker   String?
+  testCases       TestCase[]
+  submissions     Submission[]
+}
+
+model TestCase {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  input       String
+  expected    String
+  category    String   @default("SYSTEM") // SAMPLE | PRETEST | SYSTEM
+  isSample    Boolean  @default(false)
+  isPretest   Boolean  @default(false)
+  orderIndex  Int      @default(0)
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 9: Development Commands -->
+      <section id="development-commands" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+          <i class="fa-solid fa-terminal"></i>
+          <span>CLI & Commands</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          Development & Testing Commands
+        </h2>
+
+        <div class="space-y-3">
+          <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-xs shadow-lg">
+            <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-slate-400 text-[11px]">
+              <span class="font-semibold text-slate-300">Run Development Servers</span>
+              <button onclick="copyCode(this)" class="text-slate-400 hover:text-emerald-400 transition-colors flex items-center space-x-1">
+                <i class="fa-solid fa-copy"></i>
+                <span>Copy</span>
+              </button>
+            </div>
+            <pre class="p-4 overflow-x-auto text-slate-300 leading-relaxed"><code># Start all services concurrently:
+npm run start
+
+# Or start services individually:
+cd educode-server && npm run start:dev  # NestJS API on http://localhost:3001
+cd educode-client && npm run dev        # Next.js on http://localhost:3000</code></pre>
+          </div>
+
+          <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-xs shadow-lg">
+            <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-slate-400 text-[11px]">
+              <span class="font-semibold text-slate-300">Run Unit Tests & Builds</span>
+              <button onclick="copyCode(this)" class="text-slate-400 hover:text-emerald-400 transition-colors flex items-center space-x-1">
+                <i class="fa-solid fa-copy"></i>
+                <span>Copy</span>
+              </button>
+            </div>
+            <pre class="p-4 overflow-x-auto text-slate-300 leading-relaxed"><code># Run Client Jest Tests (10 suites, 53 tests):
+cd educode-client && npm test -- --watchAll=false
+
+# Run Server Jest Tests (5 suites, 18 tests):
+cd educode-server && npm test
+
+# Typecheck & Build:
+cd educode-client && npx tsc --noEmit
+cd educode-server && npm run build</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 10: Security & Roles -->
+      <section id="security-rbac" class="doc-section scroll-mt-24 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold">
+          <i class="fa-solid fa-shield-halved"></i>
+          <span>Access Control</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">
+          RBAC Roles & Seed Test Accounts
+        </h2>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+            <div class="text-purple-400 font-bold text-sm">Faculty / Instructor</div>
+            <div class="text-slate-400 mt-1">Full problem authoring, test case creation, grading override, classroom management.</div>
+            <div class="mt-2 font-mono text-slate-300 bg-slate-950 p-2 rounded-lg text-[11px]">
+              alan.turing@teacher.university.edu<br>
+              PW: <span class="text-emerald-400">EduCodeFaculty2026!</span>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+            <div class="text-emerald-400 font-bold text-sm">Student</div>
+            <div class="text-slate-400 mt-1">Solve assessments, run pretests, submit solutions, join classrooms.</div>
+            <div class="mt-2 font-mono text-slate-300 bg-slate-950 p-2 rounded-lg text-[11px]">
+              stu-2026-001@student.university.edu<br>
+              PW: <span class="text-emerald-400">EduCodeStudent2026!</span>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+            <div class="text-blue-400 font-bold text-sm">Teaching Assistant (TA)</div>
+            <div class="text-slate-400 mt-1">Review student submissions, provide grading feedback.</div>
+            <div class="mt-2 font-mono text-slate-300 bg-slate-950 p-2 rounded-lg text-[11px]">
+              teaching.assistant.bob@ta.university.edu<br>
+              PW: <span class="text-emerald-400">EduCodeTA2026!</span>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+            <div class="text-red-400 font-bold text-sm">System Administrator</div>
+            <div class="text-slate-400 mt-1">Manage global users, courses, execution clusters, and audit logs.</div>
+            <div class="mt-2 font-mono text-slate-300 bg-slate-950 p-2 rounded-lg text-[11px]">
+              system.administrator@admin.university.edu<br>
+              PW: <span class="text-emerald-400">EduCodeAdmin2026!</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800 bg-slate-950 py-6 text-center text-xs text-slate-500">
+    EduCode Platform Developer Documentation • Built with Next.js 14, NestJS & TypeScript • &copy; 2026 EduCode
+  </footer>
+
+  <script>
+    function copyCode(button) {
+      const codeBlock = button.parentElement.nextElementSibling.querySelector('code');
+      if (!codeBlock) return;
+      navigator.clipboard.writeText(codeBlock.innerText).then(() => {
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i><span class="text-emerald-400">Copied!</span>';
+        setTimeout(() => {
+          button.innerHTML = originalHTML;
+        }, 2000);
+      });
+    }
+
+    function filterDocs() {
+      const query = document.getElementById('docsSearch').value.toLowerCase();
+      const sections = document.querySelectorAll('.doc-section');
+      sections.forEach(sec => {
+        const text = sec.innerText.toLowerCase();
+        if (text.includes(query) || !query) {
+          sec.style.display = 'block';
+        } else {
+          sec.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

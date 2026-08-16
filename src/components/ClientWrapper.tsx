@@ -16,11 +16,13 @@ export const ClientWrapper: React.FC<{ children: React.ReactNode }> = ({ childre
     initSession();
   }, [initSession]);
 
+  const isPublicPage = pathname === '/login' || pathname.startsWith('/docs');
+
   useEffect(() => {
-    if (!isLoading && !user && pathname !== '/login') {
+    if (!isLoading && !user && !isPublicPage) {
       router.push('/login');
     }
-  }, [isLoading, user, pathname, router]);
+  }, [isLoading, user, isPublicPage, router]);
 
   if (isLoading) {
     return (
@@ -33,14 +35,15 @@ export const ClientWrapper: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   }
 
-  const isLoginPage = pathname === '/login';
+  const isDocsPage = pathname.startsWith('/docs');
+  const hideAppSidebar = isPublicPage;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-900 text-slate-100 overflow-hidden">
       <TitleBar />
       <div className="flex-1 flex overflow-hidden">
-        {!isLoginPage && <Sidebar />}
-        <main className="flex-1 overflow-y-auto bg-slate-950/40 p-6">
+        {!hideAppSidebar && <Sidebar />}
+        <main className={`flex-1 overflow-y-auto ${isDocsPage ? 'p-0 bg-slate-950' : 'bg-slate-950/40 p-6'}`}>
           {children}
         </main>
       </div>
