@@ -40,12 +40,14 @@ import FileExplorer, { WorkspaceFile } from '@/components/FileExplorer';
 import JavaPackageModal from '@/components/JavaPackageModal';
 import { PRESET_THEMES } from '@/components/themes';
 import { saveCodeDraft, loadCodeDraft, clearCodeDraft } from '@/utils/draftStorage';
+import { PostContentRenderer } from '@/components/stream/PostContentRenderer';
 import {
   TestCaseInput,
   TestCaseResult,
   TestSuiteSummary,
   runAllTestCases,
 } from '@/utils/testCaseRunner';
+import { parseCheckerMetadata } from '@/utils/testCaseChecker';
 import TestCaseRunnerPanel from '@/components/TestCaseRunnerPanel';
 import { validateCodeSyntax, parseCompilerErrors, SyntaxMarker } from '@/utils/syntaxValidator';
 import type { Monaco } from '@monaco-editor/react';
@@ -195,7 +197,7 @@ export default function StudentSolvePage() {
             setDraftStatus('saved');
           }
         } else {
-          const lang = t.allowedLanguage?.toLowerCase() || 'cpp';
+          const lang = (t.allowedLanguage || t.language || 'cpp').toLowerCase();
           const files = getDefaultFilesForLanguage(lang as any, t.templateCode);
           initialWorkspaces[t.id] = {
             workspaceFiles: files,
@@ -454,7 +456,11 @@ export default function StudentSolvePage() {
   };
 
   const handleCreateFile = (pathName: string, content = '') => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace || !currentTask) return;
+    if (!currentTask.allowMultiFile && currentWorkspace.workspaceFiles.filter((f) => !f.isFolder).length >= 1) {
+      alert('Multi-file project is disabled for this task. You can only work in a single file.');
+      return;
+    }
     if (currentWorkspace.workspaceFiles.some((f) => f.path === pathName)) return;
     const newFile: WorkspaceFile = {
       id: Math.random().toString(36).substring(2, 9),
@@ -475,7 +481,11 @@ export default function StudentSolvePage() {
   };
 
   const handleCreateFolder = (folderPath: string) => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace || !currentTask) return;
+    if (!currentTask.allowMultiFile) {
+      alert('Multi-file project is disabled for this task.');
+      return;
+    }
     if (currentWorkspace.workspaceFiles.some((f) => f.path === folderPath)) return;
     const newFolder: WorkspaceFile = {
       id: Math.random().toString(36).substring(2, 9),
@@ -786,6 +796,8 @@ export default function StudentSolvePage() {
         ];
 
     try {
+      const checkerConfig = parseCheckerMetadata(currentTask.description);
+
       const summary = await runAllTestCases(
         taskTestCases,
         currentWorkspace.code,
@@ -818,7 +830,9 @@ export default function StudentSolvePage() {
               },
             };
           });
-        }
+        },
+        10000,
+        checkerConfig
       );
       setTestSummaries((prev) => ({ ...prev, [currentTask.id]: summary }));
     } catch (err) {
@@ -1048,6 +1062,7 @@ export default function StudentSolvePage() {
                     isRunning={isTesting}
                     onRunAll={handleRunAllTests}
                     onAddCustomTestCase={handleAddCustomTestCase}
+                    checkerConfig={parseCheckerMetadata(currentTask.description)}
                   />
                 </div>
               ) : activeTab === 'problem' ? (
@@ -1062,8 +1077,16 @@ export default function StudentSolvePage() {
                     </span>
                   </div>
 
-                  <div className="text-slate-300 whitespace-pre-wrap mt-4 text-sm leading-relaxed">
-                    {currentTask.description}
+                  <div className="mt-4">
+                    {currentTask.description ? (
+                      <PostContentRenderer
+                        body={currentTask.description}
+                        defaultLanguage={currentWorkspace?.language || 'cpp'}
+                        isPostRunnable={false}
+                      />
+                    ) : (
+                      <p className="text-slate-500 italic text-xs">No description provided for this task.</p>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1183,6 +1206,7 @@ export default function StudentSolvePage() {
             files={currentWorkspace.workspaceFiles}
             activeFilePath={currentWorkspace.activeFilePath}
             language={currentWorkspace.language}
+            allowMultiFile={Boolean(currentTask?.allowMultiFile)}
             onSelectFile={handleSelectFile}
             onCreateFile={handleCreateFile}
             onCreateFolder={handleCreateFolder}

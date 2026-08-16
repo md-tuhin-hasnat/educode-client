@@ -694,7 +694,7 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
             <div>
               <h3 className="text-base font-extrabold text-white">Coursework, Labs & Assessments</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Manage interactive lab sessions, homework assignments, and exams containing programming problems.
+                Interactive lab sessions, homework assignments, and exams containing programming problems.
               </p>
             </div>
             
@@ -731,14 +731,6 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
                 >
                   <FontAwesomeIcon icon={faGraduationCap} />
                   <span>+ New Exam</span>
-                </button>
-
-                <button
-                  onClick={() => router.push(`/teacher/tasks/new?courseId=${course.id}`)}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all"
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                  <span>+ Problem Task</span>
                 </button>
               </div>
             )}
@@ -1103,49 +1095,6 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
                           </div>
                         );
                       })}
-                  </div>
-                </div>
-              )}
-
-              {/* 📂 GROUP 4: STANDALONE TASKS (if any) */}
-              {course.tasks?.filter((t) => !t.assessmentId && !course.assessments?.some((a) => a.tasks?.some((at) => at.id === t.id))).length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
-                    <FontAwesomeIcon icon={faTasks} className="text-slate-400 text-sm" />
-                    <h4 className="text-sm font-extrabold text-slate-300 uppercase tracking-wider">
-                      Standalone Problem Tasks
-                    </h4>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {course.tasks
-                      .filter((t) => !t.assessmentId && !course.assessments?.some((a) => a.tasks?.some((at) => at.id === t.id)))
-                      .map((task) => (
-                        <div
-                          key={task.id}
-                          className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-all"
-                        >
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40">
-                                {task.taskType}
-                              </span>
-                              <span className="text-xs text-slate-400 font-semibold">{task.maxPoints} Points</span>
-                            </div>
-                            <h4 className="text-sm font-bold text-slate-100">{task.title}</h4>
-                          </div>
-
-                          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                            <span className="text-[11px] text-slate-500">Due: {new Date(task.deadline).toLocaleDateString()}</span>
-                            <button
-                              onClick={() => router.push(user?.role === 'STUDENT' ? `/student/exam?taskId=${task.id}` : `/teacher/tasks/${task.id}`)}
-                              className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-bold"
-                            >
-                              Open Task
-                            </button>
-                          </div>
-                        </div>
-                      ))}
                   </div>
                 </div>
               )}

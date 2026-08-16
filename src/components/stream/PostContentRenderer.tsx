@@ -19,6 +19,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { apiClient } from '@/config/api';
 import { doesCodeRequireStdin } from '@/utils/syntaxValidator';
+import { renderMathInHtml } from '@/utils/mathRenderer';
 
 export interface CodeBlockItem {
   id: string;
@@ -434,12 +435,14 @@ export const PostContentRenderer: React.FC<PostContentRendererProps> = ({
                 <div
                   dir="ltr"
                   className="text-xs text-slate-200 leading-relaxed text-left [&_*]:text-left [&_h1]:text-lg [&_h1]:font-black [&_h1]:text-white [&_h1]:mt-4 [&_h1]:mb-2 [&_h1:first-child]:mt-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-white [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2:first-child]:mt-0 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-slate-100 [&_h3]:mt-2.5 [&_h3]:mb-1 [&_h3:first-child]:mt-0 [&_p]:text-left [&_p]:mt-0 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:my-2.5 [&_ul:first-child]:mt-0 [&_ul:last-child]:mb-0 [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:text-left [&_ol]:my-2.5 [&_ol:first-child]:mt-0 [&_ol:last-child]:mb-0 [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:text-left [&_li]:my-0.5 [&_li]:text-left [&_blockquote]:my-2.5 [&_blockquote:first-child]:mt-0 [&_blockquote:last-child]:mb-0 [&_blockquote]:border-l-4 [&_blockquote]:border-teal-500 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-300 [&_blockquote]:text-left [&_table]:my-3 [&_table:first-child]:mt-0 [&_table:last-child]:mb-0 [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-slate-800 [&_th]:border [&_th]:border-slate-800 [&_th]:p-2 [&_th]:bg-slate-900 [&_th]:text-left [&_td]:border [&_td]:border-slate-800 [&_td]:p-2 [&_td]:text-left [&_a]:text-teal-400 [&_a]:underline font-sans"
-                  dangerouslySetInnerHTML={{ __html: seg.text }}
+                  dangerouslySetInnerHTML={{ __html: renderMathInHtml(seg.text) }}
                 />
               ) : (
-                <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed text-left" dir="ltr">
-                  {seg.text}
-                </div>
+                <div
+                  className="text-xs text-slate-200 leading-relaxed text-left font-sans"
+                  dir="ltr"
+                  dangerouslySetInnerHTML={{ __html: renderMathInHtml(seg.text.replace(/\n/g, '<br/>')) }}
+                />
               )
             )}
 

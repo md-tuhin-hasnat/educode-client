@@ -14,6 +14,7 @@ import {
   faUserGraduate,
   faChevronDown,
   faClipboardList,
+  faVial,
 } from '@fortawesome/free-solid-svg-icons';
 import api from '@/config/api';
 
@@ -23,14 +24,18 @@ interface Task {
   description: string | null;
   language: 'c' | 'cpp' | 'java' | 'python';
   maxPoints: number;
-  deadline: string;
-  isPublished: boolean;
+  deadline?: string;
   createdAt: string;
   course: {
     id: string;
     code: string;
     title: string;
   };
+  assessment?: {
+    id: string;
+    title: string;
+    type: string;
+  } | null;
   _count?: {
     submissions: number;
   };
@@ -43,9 +48,8 @@ export default function TeacherTasksPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState<string>('all');
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedCourse, setSelectedCourse] = useState('all');
+  const [selectedLanguage, setSelectedLanguage] = useState('all');
 
   useEffect(() => {
     async function fetchTasks() {
@@ -84,14 +88,10 @@ export default function TeacherTasksPage() {
 
       const matchesCourse = selectedCourse === 'all' || task.course?.id === selectedCourse;
       const matchesLanguage = selectedLanguage === 'all' || task.language === selectedLanguage;
-      const matchesStatus =
-        selectedStatus === 'all' ||
-        (selectedStatus === 'published' && task.isPublished) ||
-        (selectedStatus === 'draft' && !task.isPublished);
 
-      return matchesSearch && matchesCourse && matchesLanguage && matchesStatus;
+      return matchesSearch && matchesCourse && matchesLanguage;
     });
-  }, [tasks, searchQuery, selectedCourse, selectedLanguage, selectedStatus]);
+  }, [tasks, searchQuery, selectedCourse, selectedLanguage]);
 
   const getLanguageColor = (lang: string) => {
     switch (lang.toLowerCase()) {
@@ -115,11 +115,11 @@ export default function TeacherTasksPage() {
         <div>
           <div className="flex items-center space-x-2 text-xs font-semibold text-brand-400">
             <FontAwesomeIcon icon={faTasks} />
-            <span>Problem Repository & Task Management</span>
+            <span>Teacher Private Problem Bank</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1">Problem Tasks</h1>
           <p className="text-xs text-slate-400 mt-1">
-            Create, test, and manage programming tasks and problem suites.
+            Your private repository of programming problems. Attach tasks to Course Streams, Labs, Exams, or Assignments to publish them to students.
           </p>
         </div>
 
@@ -184,22 +184,6 @@ export default function TeacherTasksPage() {
               <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
             </div>
           </div>
-
-          {/* Status Filter */}
-          <div className="relative">
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="appearance-none bg-slate-900/80 border border-slate-700 text-white text-xs rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-brand-500 transition-all cursor-pointer min-w-[130px]"
-            >
-              <option value="all">All Status</option>
-              <option value="published">Published</option>
-              <option value="draft">Draft</option>
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
-              <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -240,13 +224,13 @@ export default function TeacherTasksPage() {
                         <span>{task.language}</span>
                       </span>
                     </div>
-                    {task.isPublished ? (
-                      <span className="text-emerald-400 flex items-center space-x-1 text-xs font-medium" title="Published">
-                        <FontAwesomeIcon icon={faCheckCircle} />
+                    {task.assessment?.title ? (
+                      <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20 truncate max-w-[140px]" title={`Attached to: ${task.assessment.title}`}>
+                        {task.assessment.title}
                       </span>
                     ) : (
-                      <span className="text-amber-400 flex items-center space-x-1 text-xs font-medium" title="Draft">
-                        <FontAwesomeIcon icon={faTimesCircle} />
+                      <span className="text-[10px] font-medium text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/50">
+                        Private Bank
                       </span>
                     )}
                   </div>
@@ -261,7 +245,7 @@ export default function TeacherTasksPage() {
 
                   {task.description && (
                     <p className="text-xs text-slate-400 line-clamp-2 mb-4">
-                      {task.description}
+                      {task.description.replace(/<[^>]*>?/gm, '')}
                     </p>
                   )}
                 </div>
@@ -270,8 +254,8 @@ export default function TeacherTasksPage() {
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="flex items-center space-x-2 text-slate-300">
                       <FontAwesomeIcon icon={faCalendarAlt} className="text-slate-500" />
-                      <span className="truncate" title={new Date(task.deadline).toLocaleString()}>
-                        {new Date(task.deadline).toLocaleDateString()}
+                      <span className="truncate">
+                        {new Date(task.createdAt).toLocaleDateString()}
                       </span>
                     </div>
                     <div className="flex items-center space-x-2 text-slate-300 justify-end">

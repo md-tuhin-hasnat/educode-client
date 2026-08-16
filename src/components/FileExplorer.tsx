@@ -12,6 +12,7 @@ import {
   faCube,
   faChevronDown,
   faChevronRight,
+  faLock,
 } from '@fortawesome/free-solid-svg-icons';
 
 export interface WorkspaceFile {
@@ -25,6 +26,7 @@ interface FileExplorerProps {
   files: WorkspaceFile[];
   activeFilePath: string;
   language: 'cpp' | 'python' | 'java' | 'c';
+  allowMultiFile?: boolean;
   onSelectFile: (path: string) => void;
   onCreateFile: (path: string, content?: string) => void;
   onCreateFolder: (path: string) => void;
@@ -40,10 +42,25 @@ interface FileTreeNode {
   children: FileTreeNode[];
 }
 
+const ALLOWED_EXTENSIONS: Record<string, string[]> = {
+  c: ['.c', '.h'],
+  cpp: ['.cpp', '.cc', '.cxx', '.c++', '.h', '.hpp'],
+  java: ['.java'],
+  python: ['.py'],
+};
+
+const DEFAULT_EXTENSIONS: Record<string, string> = {
+  c: '.c',
+  cpp: '.cpp',
+  java: '.java',
+  python: '.py',
+};
+
 export default function FileExplorer({
   files,
   activeFilePath,
   language,
+  allowMultiFile = true,
   onSelectFile,
   onCreateFile,
   onCreateFolder,
@@ -63,7 +80,6 @@ export default function FileExplorer({
   const buildTree = (): FileTreeNode[] => {
     const rootNodes: FileTreeNode[] = [];
 
-    // Helper to find or create child node
     const getOrCreateChild = (nodes: FileTreeNode[], name: string, path: string, isFolder: boolean) => {
       let existing = nodes.find((n) => n.name === name && n.isFolder === isFolder);
       if (!existing) {
@@ -83,7 +99,6 @@ export default function FileExplorer({
         const currentPath = parts.slice(0, i + 1).join('/');
 
         if (isLast && !file.isFolder) {
-          // File node
           currentLevel.push({
             name: part,
             path: file.path,
@@ -92,14 +107,12 @@ export default function FileExplorer({
             children: [],
           });
         } else {
-          // Folder node
           const folderNode = getOrCreateChild(currentLevel, part, currentPath, true);
           currentLevel = folderNode.children;
         }
       }
     });
 
-    // Sort folders first, then files alphabetically
     const sortNodes = (nodes: FileTreeNode[]) => {
       nodes.sort((a, b) => {
         if (a.isFolder && !b.isFolder) return -1;
@@ -118,7 +131,37 @@ export default function FileExplorer({
   const handleCreateFileSubmit = (e: React.FormEvent, parentDir = '') => {
     e.preventDefault();
     if (!newFileName.trim()) return;
-    const finalPath = parentDir ? `${parentDir}/${newFileName.trim()}` : newFileName.trim();
+
+    if (!allowMultiFile && files.filter((f) => !f.isFolder).length >= 1) {
+      alert('Multi-file project is disabled for this task. You can only work in a single file.');
+      setNewFileName('');
+      setNewFileInputPath(null);
+      return;
+    }
+
+    const langKey = (language || 'cpp').toLowerCase();
+    const allowed = ALLOWED_EXTENSIONS[langKey] || ['.cpp', '.cc', '.h', '.hpp'];
+    const defaultExt = DEFAULT_EXTENSIONS[langKey] || '.cpp';
+
+    let fileName = newFileName.trim();
+    const parts = fileName.split('/');
+    let baseName = parts[parts.length - 1];
+
+    if (!baseName.includes('.')) {
+      baseName += defaultExt;
+      parts[parts.length - 1] = baseName;
+      fileName = parts.join('/');
+    } else {
+      const hasValidExt = allowed.some((ext) => baseName.toLowerCase().endsWith(ext));
+      if (!hasValidExt) {
+        alert(
+          `Invalid file extension for ${language.toUpperCase()}. Only ${allowed.join(', ')} files are allowed for this task.`
+        );
+        return;
+      }
+    }
+
+    const finalPath = parentDir ? `${parentDir}/${fileName}` : fileName;
     onCreateFile(finalPath);
     setNewFileName('');
     setNewFileInputPath(null);
@@ -127,11 +170,21 @@ export default function FileExplorer({
   const handleCreateFolderSubmit = (e: React.FormEvent, parentDir = '') => {
     e.preventDefault();
     if (!newFileName.trim()) return;
+
+    if (!allowMultiFile) {
+      alert('Multi-file project is disabled for this task.');
+      setNewFileName('');
+      setNewFolderNameInput(null);
+      return;
+    }
+
     const finalPath = parentDir ? `${parentDir}/${newFileName.trim()}` : newFileName.trim();
     onCreateFolder(finalPath);
     setNewFileName('');
     setNewFolderNameInput(null);
   };
+
+  const fileCount = files.filter((f) => !f.isFolder).length;
 
   const renderTree = (nodes: FileTreeNode[], depth = 0) => {
     return nodes.map((node) => {
@@ -157,34 +210,36 @@ export default function FileExplorer({
                 <span className="truncate">{node.name}</span>
               </div>
 
-              {/* Quick actions for folder */}
-              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
-                <button
-                  title="New File in Folder"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setNewFolderNameInput(null);
-                    setNewFileInputPath(node.path);
-                  }}
-                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-700/60 rounded"
-                >
-                  <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
-                </button>
-                <button
-                  title="Delete Folder"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeletePath(node.path);
-                  }}
-                  className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-700/60 rounded"
-                >
-                  <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
-                </button>
-              </div>
+              {/* Quick actions for folder (only if multi-file is allowed) */}
+              {allowMultiFile && (
+                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
+                  <button
+                    title="New File in Folder"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNewFolderNameInput(null);
+                      setNewFileInputPath(node.path);
+                    }}
+                    className="p-1 text-gray-400 hover:text-white hover:bg-gray-700/60 rounded"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
+                  </button>
+                  <button
+                    title="Delete Folder"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeletePath(node.path);
+                    }}
+                    className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-700/60 rounded"
+                  >
+                    <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Inline new file inside folder */}
-            {newFileInputPath === node.path && (
+            {allowMultiFile && newFileInputPath === node.path && (
               <form
                 onSubmit={(e) => handleCreateFileSubmit(e, node.path)}
                 style={{ paddingLeft: `${(depth + 1) * 12 + 12}px` }}
@@ -196,7 +251,7 @@ export default function FileExplorer({
                   value={newFileName}
                   onChange={(e) => setNewFileName(e.target.value)}
                   onBlur={() => setNewFileInputPath(null)}
-                  placeholder="File name..."
+                  placeholder={`File name (${DEFAULT_EXTENSIONS[language] || '.cpp'})...`}
                   className="w-full bg-[#11111b] border border-blue-500/60 rounded px-2 py-0.5 text-xs text-white outline-none font-mono"
                 />
               </form>
@@ -212,6 +267,8 @@ export default function FileExplorer({
 
       // File node
       const isActive = node.path === activeFilePath;
+      const canDelete = allowMultiFile && fileCount > 1;
+
       return (
         <div
           key={node.path}
@@ -228,17 +285,19 @@ export default function FileExplorer({
             <span className="truncate">{node.name}</span>
           </div>
 
-          {/* Delete action for file */}
-          <button
-            title="Delete File"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeletePath(node.path);
-            }}
-            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-400 transition-opacity"
-          >
-            <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
-          </button>
+          {/* Delete action for file (allowed only when multi-file is enabled and >1 file exists) */}
+          {canDelete && (
+            <button
+              title="Delete File"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeletePath(node.path);
+              }}
+              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-400 transition-opacity"
+            >
+              <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
+            </button>
+          )}
         </div>
       );
     });
@@ -248,48 +307,59 @@ export default function FileExplorer({
     <div className="h-full flex flex-col bg-[#181825] border-r border-gray-800 text-gray-300">
       {/* Header with Title & Quick Action Toolbar */}
       <div className="p-3 border-b border-gray-800 flex items-center justify-between bg-[#11111b]">
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Explorer</span>
-        <div className="flex items-center gap-1">
-          {/* NetBeans Java Package Helper Button */}
-          {language === 'java' && onOpenJavaPackageModal && (
-            <button
-              onClick={onOpenJavaPackageModal}
-              title="NetBeans Java Package Helper"
-              className="px-2 py-1 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/40 text-orange-300 text-[11px] font-medium rounded flex items-center gap-1 transition-all"
-            >
-              <FontAwesomeIcon icon={faCube} className="text-[10px]" />
-              <span>Package</span>
-            </button>
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Explorer</span>
+          {!allowMultiFile && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1" title="Single-File Task Mode">
+              <FontAwesomeIcon icon={faLock} className="text-[9px]" />
+              <span>Single File</span>
+            </span>
           )}
-
-          {/* Add File */}
-          <button
-            onClick={() => {
-              setNewFolderNameInput(null);
-              setNewFileInputPath('');
-            }}
-            title="New File"
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
-          >
-            <FontAwesomeIcon icon={faPlus} className="text-xs" />
-          </button>
-
-          {/* Add Folder */}
-          <button
-            onClick={() => {
-              setNewFileInputPath(null);
-              setNewFolderNameInput('');
-            }}
-            title="New Folder"
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
-          >
-            <FontAwesomeIcon icon={faFolderPlus} className="text-xs" />
-          </button>
         </div>
+
+        {allowMultiFile && (
+          <div className="flex items-center gap-1">
+            {/* NetBeans Java Package Helper Button */}
+            {language === 'java' && onOpenJavaPackageModal && (
+              <button
+                onClick={onOpenJavaPackageModal}
+                title="NetBeans Java Package Helper"
+                className="px-2 py-1 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/40 text-orange-300 text-[11px] font-medium rounded flex items-center gap-1 transition-all"
+              >
+                <FontAwesomeIcon icon={faCube} className="text-[10px]" />
+                <span>Package</span>
+              </button>
+            )}
+
+            {/* Add File */}
+            <button
+              onClick={() => {
+                setNewFolderNameInput(null);
+                setNewFileInputPath('');
+              }}
+              title="New File"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+            >
+              <FontAwesomeIcon icon={faPlus} className="text-xs" />
+            </button>
+
+            {/* Add Folder */}
+            <button
+              onClick={() => {
+                setNewFileInputPath(null);
+                setNewFolderNameInput('');
+              }}
+              title="New Folder"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+            >
+              <FontAwesomeIcon icon={faFolderPlus} className="text-xs" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Root new file input */}
-      {newFileInputPath === '' && (
+      {allowMultiFile && newFileInputPath === '' && (
         <form onSubmit={(e) => handleCreateFileSubmit(e, '')} className="p-2 bg-[#1e1e2e]">
           <input
             type="text"
@@ -297,14 +367,14 @@ export default function FileExplorer({
             value={newFileName}
             onChange={(e) => setNewFileName(e.target.value)}
             onBlur={() => setNewFileInputPath(null)}
-            placeholder="New file path (e.g. model.py)..."
+            placeholder={`New file name (e.g. helper${DEFAULT_EXTENSIONS[language] || '.cpp'})...`}
             className="w-full bg-[#11111b] border border-blue-500/60 rounded px-2 py-1 text-xs text-white outline-none font-mono"
           />
         </form>
       )}
 
       {/* Root new folder input */}
-      {newFolderNameInput === '' && (
+      {allowMultiFile && newFolderNameInput === '' && (
         <form onSubmit={(e) => handleCreateFolderSubmit(e, '')} className="p-2 bg-[#1e1e2e]">
           <input
             type="text"

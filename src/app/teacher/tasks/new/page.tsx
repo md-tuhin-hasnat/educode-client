@@ -1,99 +1,135 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuthStore } from '@/store/useAuthStore';
+import Link from 'next/link';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faPlusCircle,
-  faTrash,
-  faCheckCircle,
+  faArrowLeft,
+  faPlus,
   faCode,
   faVial,
   faShieldAlt,
+  faEye,
+  faEyeSlash,
+  faTasks,
+  faCheckCircle,
+  faTrash,
+  faWandMagicSparkles,
+  faSpinner,
+  faBookOpen,
   faFileImport,
   faFileExport,
   faFlask,
-  faBookOpen,
-  faGraduationCap,
+  faFloppyDisk,
+  faScaleBalanced,
 } from '@fortawesome/free-solid-svg-icons';
-import { EduCodeEditor } from '@/components/Editor/EduCodeEditor';
+import api from '@/config/api';
+import TeacherTaskEngineeringIDE, { TestCaseItem } from '@/components/TeacherTaskEngineeringIDE';
+import { WordMarkdownEditor } from '@/components/stream/WordMarkdownEditor';
+import {
+  CheckerConfig,
+  DEFAULT_CHECKER_CONFIG,
+  serializeTaskWorkbenchMetadata,
+  parseTaskWorkbenchMetadata,
+  stripTaskWorkbenchMetadata,
+} from '@/utils/testCaseChecker';
 
-export default function CreateTaskPage() {
+export default function TeacherTaskNewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuthStore();
-  
-  const [courseId, setCourseId] = useState('');
-  const [courses, setCourses] = useState<any[]>([]);
-  const [assessmentId, setAssessmentId] = useState<string>('');
-  const [assessments, setAssessments] = useState<any[]>([]);
-  const [maxPoints, setMaxPoints] = useState(100);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [assessments, setAssessments] = useState<any[]>([]);
+
+  // Form states
+  const [courseId, setCourseId] = useState('');
+  const [assessmentId, setAssessmentId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [allowedLanguages, setAllowedLanguages] = useState(['cpp', 'python']);
-  const [testCases, setTestCases] = useState([
-    { input: '5\n10 20 30 40 50', expectedOutput: 'Sum = 150', isHidden: false, points: 10 },
+  const [language, setLanguage] = useState<'c' | 'cpp' | 'java' | 'python'>('cpp');
+  const [maxPoints, setMaxPoints] = useState(100);
+  const [allowAutocomplete, setAllowAutocomplete] = useState(true);
+  const [allowMultiFile, setAllowMultiFile] = useState(false);
+
+  // Multi-Role IDE states
+  const [solutionCode, setSolutionCode] = useState('');
+  const [generatorCode, setGeneratorCode] = useState('');
+  const [templateCode, setTemplateCode] = useState('');
+  const [checkerConfig, setCheckerConfig] = useState<CheckerConfig>(DEFAULT_CHECKER_CONFIG);
+
+  // Test cases state
+  const [testCases, setTestCases] = useState<TestCaseItem[]>([
+    {
+      id: 1,
+      inputData: '5',
+      expectedOutput: '31.415927',
+      points: 25,
+      isHidden: false,
+      order: 0,
+    },
   ]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Test Case Maker State
-  const [referenceSolution, setReferenceSolution] = useState('');
-  const [referenceLanguage, setReferenceLanguage] = useState('cpp');
-  const [isGeneratingOutputs, setIsGeneratingOutputs] = useState(false);
-  const [isIdeOpen, setIsIdeOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize courseId and assessmentId from searchParams
+  // Load teacher courses
   useEffect(() => {
-    const qCourse = searchParams.get('courseId');
-    const qAssessment = searchParams.get('assessmentId');
-    if (qCourse) setCourseId(qCourse);
-    if (qAssessment) setAssessmentId(qAssessment);
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (user?.token) {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/courses`, {
-        headers: { 'Authorization': `Bearer ${user.token}` }
-      })
-      .then(res => res.ok ? res.json() : [])
-      .then(json => {
-        const c = json.data?.items || json.items || json;
-        if (Array.isArray(c)) {
-          setCourses(c);
-          if (c.length > 0 && !courseId && !searchParams.get('courseId')) {
-            setCourseId(c[0].id);
+    async function loadCourses() {
+      try {
+        const res = await api.get('/courses');
+        const list = res.data?.items || res.data || [];
+        if (Array.isArray(list)) {
+          setCourses(list);
+          const qCourse = searchParams.get('courseId');
+          if (qCourse && list.some((c: any) => c.id === qCourse)) {
+            setCourseId(qCourse);
+          } else if (list.length > 0) {
+            setCourseId(list[0].id);
           }
         }
-      })
-      .catch(err => console.error("Failed to load courses", err));
+      } catch (err) {
+        console.error('Failed to load courses', err);
+      }
     }
-  }, [user]);
+    loadCourses();
+  }, [searchParams]);
 
-  // When courseId changes, fetch course assessments
+  // Query assessment pre-selection
   useEffect(() => {
-    if (user?.token && courseId) {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/assessments/course/${courseId}`, {
-        headers: { 'Authorization': `Bearer ${user.token}` }
-      })
-      .then(res => res.ok ? res.json() : [])
-      .then(json => {
-        const list = json.data?.items || json.items || json;
-        if (Array.isArray(list)) {
-          setAssessments(list);
-        }
-      })
-      .catch(err => console.error("Failed to load assessments", err));
+    const qAssessment = searchParams.get('assessmentId');
+    if (qAssessment) {
+      setAssessmentId(qAssessment);
     }
-  }, [user, courseId]);
+  }, [searchParams]);
+
+  // Refresh assessments whenever selected courseId changes
+  useEffect(() => {
+    if (courseId) {
+      api.get(`/assessments/course/${courseId}`)
+        .then((res) => {
+          const list = res.data?.items || res.data || [];
+          if (Array.isArray(list)) {
+            setAssessments(list);
+          }
+        })
+        .catch((err) => console.error('Failed to load assessments', err));
+    } else {
+      setAssessments([]);
+    }
+  }, [courseId]);
 
   const handleAddTestCase = () => {
     setTestCases([
       ...testCases,
-      { input: '', expectedOutput: '', isHidden: true, points: 10 },
+      {
+        id: Date.now(),
+        inputData: '',
+        expectedOutput: '',
+        points: 25,
+        isHidden: testCases.length > 0,
+        order: testCases.length,
+      },
     ]);
   };
 
@@ -101,495 +137,494 @@ export default function CreateTaskPage() {
     setTestCases(testCases.filter((_, i) => i !== index));
   };
 
-  const toggleLanguage = (lang: string) => {
-    if (allowedLanguages.includes(lang)) {
-      setAllowedLanguages(allowedLanguages.filter((l) => l !== lang));
-    } else {
-      setAllowedLanguages([...allowedLanguages, lang]);
-    }
-  };
-
-  const handleGenerateOutputs = async () => {
-    if (!referenceSolution.trim()) {
-      alert("Please provide a reference solution code.");
-      return;
-    }
-    if (testCases.length === 0) {
-      alert("Please add at least one test case.");
-      return;
-    }
-    setIsGeneratingOutputs(true);
-    
-    try {
-      const updatedTestCases = [...testCases];
-      let hasError = false;
-      
-      for (let i = 0; i < updatedTestCases.length; i++) {
-        const tc = updatedTestCases[i];
-        
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stream/execute`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${user?.token}`
-          },
-          body: JSON.stringify({
-            code: referenceSolution,
-            language: referenceLanguage,
-            input: tc.input || ''
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.exitCode === 0) {
-             updatedTestCases[i].expectedOutput = (data.stdout || '').trimEnd();
-          } else {
-             console.error(`Execution error for test case ${i+1}:`, data.stderr);
-             updatedTestCases[i].expectedOutput = `[Execution Error]\n${data.stderr}`;
-             hasError = true;
-          }
-        } else {
-          console.error(`Failed to execute test case ${i+1}`);
-          updatedTestCases[i].expectedOutput = `[Server Error]`;
-          hasError = true;
-        }
-      }
-      
-      setTestCases(updatedTestCases);
-      if (hasError) {
-        alert("Outputs generated, but some test cases had execution errors.");
-      } else {
-        alert("Outputs successfully generated for all test cases!");
-      }
-    } catch (err) {
-      console.error(err);
-      alert('An error occurred during output generation');
-    } finally {
-      setIsGeneratingOutputs(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user?.token) return;
-    setIsSubmitting(true);
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tasks`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({
-          courseId: courseId || 'course-123',
-          assessmentId: assessmentId ? assessmentId : undefined,
-          title,
-          description,
-          taskType: 'assignment',
-          language: allowedLanguages[0] || 'cpp',
-          maxPoints: Number(maxPoints),
-          deadline: new Date(Date.now() + 86400000 * 7).toISOString(), // Default 1 week
-          testCases: testCases.map(tc => ({
-            inputData: tc.input,
-            expectedOutput: tc.expectedOutput,
-            isHidden: tc.isHidden,
-            points: Number(tc.points)
-          }))
-        })
-      });
-
-      if (res.ok) {
-        const createdTask = await res.json();
-        if (courseId) {
-          router.push(`/courses/${courseId}?tab=classwork`);
-        } else {
-          router.push('/teacher/dashboard');
-        }
-      } else {
-        const err = await res.json();
-        alert(`Failed: ${err.message || 'Unknown error'}`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('An error occurred');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleExport = () => {
-    const packageData = {
-      title,
-      description,
-      allowedLanguages,
-      maxPoints,
-      testCases,
-      referenceSolution,
-      referenceLanguage
-    };
-    const blob = new Blob([JSON.stringify(packageData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title ? title.replace(/\s+/g, '_') : 'problem_package'}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleUpdateTestCase = (index: number, field: keyof TestCaseItem, value: any) => {
+    const updated = [...testCases];
+    updated[index] = { ...updated[index], [field]: value };
+    setTestCases(updated);
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (parsed.title) setTitle(parsed.title);
-        if (parsed.description) setDescription(parsed.description);
-        if (parsed.allowedLanguages) setAllowedLanguages(parsed.allowedLanguages);
-        if (parsed.maxPoints) setMaxPoints(parsed.maxPoints);
-        if (parsed.testCases) setTestCases(parsed.testCases);
-        if (parsed.referenceSolution) setReferenceSolution(parsed.referenceSolution);
-        if (parsed.referenceLanguage) setReferenceLanguage(parsed.referenceLanguage);
-        
-        alert("Package imported successfully!");
+        const pkg = JSON.parse(event.target?.result as string);
+        if (pkg.title) setTitle(pkg.title);
+        if (pkg.description) setDescription(stripTaskWorkbenchMetadata(pkg.description));
+        if (pkg.language) setLanguage(pkg.language.toLowerCase());
+        if (pkg.solutionCode) setSolutionCode(pkg.solutionCode);
+        if (pkg.generatorCode) setGeneratorCode(pkg.generatorCode);
+        if (pkg.templateCode) setTemplateCode(pkg.templateCode);
+        if (pkg.checkerConfig) setCheckerConfig(pkg.checkerConfig);
+        if (pkg.maxPoints) setMaxPoints(pkg.maxPoints);
+        if (pkg.testCases && Array.isArray(pkg.testCases)) {
+          setTestCases(
+            pkg.testCases.map((tc: any, idx: number) => ({
+              id: tc.id || idx + 1,
+              inputData: tc.inputData || '',
+              expectedOutput: tc.expectedOutput || '',
+              points: tc.points || 25,
+              isHidden: Boolean(tc.isHidden),
+              order: idx,
+            }))
+          );
+        }
+        alert('Task package imported successfully!');
       } catch (err) {
-        console.error("Invalid package", err);
-        alert("Failed to parse the package file.");
+        alert('Invalid JSON task package file.');
       }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
+  const handleExport = () => {
+    const pkg = {
+      title,
+      description,
+      language,
+      solutionCode,
+      generatorCode,
+      templateCode,
+      checkerConfig,
+      maxPoints,
+      allowAutocomplete,
+      allowMultiFile,
+      testCases: testCases.map((tc, idx) => ({
+        inputData: tc.inputData,
+        expectedOutput: tc.expectedOutput,
+        points: tc.points,
+        isHidden: tc.isHidden,
+        order: idx,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'task'}_package.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      alert('Please provide a task title.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const finalDescription = serializeTaskWorkbenchMetadata(description.trim(), {
+        solutionCode,
+        generatorCode,
+        templateCode,
+        checkerConfig,
+      });
+
+      const payload: any = {
+        title: title.trim(),
+        description: finalDescription || null,
+        templateCode: templateCode || null,
+        language,
+        taskType: 'assignment',
+        maxPoints: Number(maxPoints) || 100,
+        allowAutocomplete,
+        allowMultiFile,
+        testCases: testCases.map((tc, idx) => ({
+          inputData: tc.inputData,
+          expectedOutput: tc.expectedOutput,
+          points: Number(tc.points) || 10,
+          isHidden: Boolean(tc.isHidden),
+          order: idx,
+        })),
+      };
+
+      if (courseId) {
+        payload.courseId = courseId;
+      }
+      if (assessmentId) {
+        payload.assessmentId = assessmentId;
+      }
+
+      const res = await api.post('/tasks', payload);
+      router.push(`/teacher/tasks/${res.data.id}`);
+    } catch (err: unknown) {
+      console.error('Failed to create task:', err);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to create task.';
+      alert(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-bold text-white">Create Problem Task</h1>
-          <p className="text-xs text-slate-400 mt-1">Design programming problems and attach them to Labs, Assignments, or Exams.</p>
+    <div className="w-full max-w-[1800px] mx-auto px-3 md:px-6 pb-16 space-y-6">
+      {/* Breadcrumb Navigation */}
+      <div className="flex items-center space-x-2 text-xs text-slate-400">
+        <Link href="/teacher/tasks" className="hover:text-white transition-colors flex items-center space-x-1.5 font-medium">
+          <FontAwesomeIcon icon={faArrowLeft} />
+          <span>Tasks</span>
+        </Link>
+        <span className="text-slate-600">/</span>
+        <span className="text-slate-200 font-bold">Create New Task</span>
+      </div>
+
+      {/* Header Banner */}
+      <div className="glass-panel p-6 md:p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xl">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2">
+            <span className="px-2.5 py-0.5 rounded-lg bg-brand-500/20 text-brand-300 border border-brand-500/30 text-[11px] font-bold uppercase tracking-wider flex items-center space-x-1">
+              <FontAwesomeIcon icon={faTasks} />
+              <span>Task Creator & Engineering Suite</span>
+            </span>
+            <span className="px-2.5 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold uppercase tracking-wider flex items-center space-x-1 font-mono">
+              <FontAwesomeIcon icon={faScaleBalanced} />
+              <span>{checkerConfig.type === 'FLOAT_TOLERANCE' ? `ε=${checkerConfig.floatTolerance}` : checkerConfig.type}</span>
+            </span>
+            <span className="px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-bold uppercase tracking-wider font-mono">
+              {language}
+            </span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">
+            Create Problem Task
+          </h1>
+          <p className="text-xs text-slate-400">
+            Write rich problem statements, reference solutions, testcase generators, floating-point precision checkers, and student starter code.
+          </p>
         </div>
-        <div className="flex space-x-3">
+
+        <div className="flex items-center space-x-3">
           <input type="file" accept=".json" ref={fileInputRef} onChange={handleImport} className="hidden" />
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center space-x-2 border border-slate-700 transition-colors">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center space-x-2 border border-slate-700 transition-colors"
+          >
             <FontAwesomeIcon icon={faFileImport} />
             <span>Import Package</span>
           </button>
-          <button type="button" onClick={handleExport} className="px-4 py-2 bg-brand-600/20 hover:bg-brand-600/40 text-brand-400 text-xs font-bold rounded-xl flex items-center space-x-2 border border-brand-500/30 transition-colors">
+          <button
+            type="button"
+            onClick={handleExport}
+            className="px-4 py-2.5 bg-brand-600/20 hover:bg-brand-600/40 text-brand-400 text-xs font-bold rounded-xl flex items-center space-x-2 border border-brand-500/30 transition-colors"
+          >
             <FontAwesomeIcon icon={faFileExport} />
             <span>Export Package</span>
           </button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Task Info */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
-            <FontAwesomeIcon icon={faCode} className="text-brand-500" />
-            <span>Task Metadata & Parent Assessment</span>
-          </h3>
+      {/* Main Creation Form */}
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Column (2/3 width) */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* General Info Card */}
+            <div className="glass-panel p-6 md:p-8 rounded-3xl border border-slate-800 space-y-5 shadow-xl">
+              <h3 className="text-sm font-extrabold text-white flex items-center space-x-2 border-b border-slate-800 pb-3">
+                <FontAwesomeIcon icon={faTasks} className="text-brand-400" />
+                <span>General Information</span>
+              </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Course</label>
-              <select
-                value={courseId}
-                onChange={(e) => setCourseId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-brand-500"
-              >
-                {courses.length === 0 ? <option value="">No courses found</option> : null}
-                {courses.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.title || c.id}</option>
-                ))}
-              </select>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Problem Task Title <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. Circle Perimeter Calculation & Precision"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl px-4 py-2.5 text-xs md:text-sm text-white outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Programming Language
+                    </label>
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value as any)}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none cursor-pointer"
+                    >
+                      <option value="c">C (GCC 13)</option>
+                      <option value="cpp">C++ (G++ 13 / C++20)</option>
+                      <option value="java">Java (OpenJDK 21)</option>
+                      <option value="python">Python (3.11)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Maximum Points
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={maxPoints}
+                      onChange={(e) => setMaxPoints(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Parent Lab / Assignment / Exam
-              </label>
-              <select
-                value={assessmentId}
-                onChange={(e) => setAssessmentId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-brand-500 font-medium"
-              >
-                <option value="">None (Standalone Problem Task)</option>
-                {assessments.map((a: any) => (
-                  <option key={a.id} value={a.id}>
-                    [{a.type}] {a.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Max Points</label>
-              <input
-                type="number"
-                required
-                min="0"
-                value={maxPoints}
-                onChange={(e) => setMaxPoints(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-brand-500"
+            {/* Problem Statement Card (Rich Post Editor with Inline & Block LaTeX Equations) */}
+            <div className="glass-panel p-6 md:p-8 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
+                <h3 className="text-sm font-extrabold text-white flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faBookOpen} className="text-brand-400" />
+                  <span>Problem Statement & Instructions</span>
+                </h3>
+                <span className="text-xs text-slate-400 flex items-center space-x-1.5">
+                  <span className="font-serif italic text-emerald-400 font-bold">f(x)</span>
+                  <span>LaTeX Equations & Rich Post Format</span>
+                </span>
+              </div>
+              <WordMarkdownEditor
+                value={description}
+                onChange={setDescription}
+                placeholder="Write full problem description, specifications, constraints, hints, code blocks, and math formulas like $r$ or $$p = 2\pi r$$..."
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Task Title</label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Binary Search Tree Insertion & Traversal"
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
-            />
+          {/* Sidebar Column (1/3 width) */}
+          <div className="space-y-6">
+            {/* Rules & Security Settings */}
+            <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-5 shadow-xl">
+              <h3 className="text-sm font-extrabold text-white flex items-center space-x-2 border-b border-slate-800 pb-3">
+                <FontAwesomeIcon icon={faShieldAlt} className="text-brand-400" />
+                <span>Security & Workspace Rules</span>
+              </h3>
+
+              <div className="space-y-4">
+                {/* Private Bank Notice */}
+                <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-1.5">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-indigo-300">
+                    <FontAwesomeIcon icon={faShieldAlt} />
+                    <span>Private Problem Bank</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Created tasks are private to you. You can publish them to students anytime through Course Streams, Lab Modules, Exams, or Assignments.
+                  </p>
+                </div>
+
+                {/* Autocomplete Toggle */}
+                <label className="flex items-center justify-between p-3 rounded-2xl bg-slate-950/70 border border-slate-800 cursor-pointer">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-200">Monaco Autocomplete</p>
+                    <p className="text-[10px] text-slate-500">Allow IntelliSense auto-suggestions</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={allowAutocomplete}
+                    onChange={(e) => setAllowAutocomplete(e.target.checked)}
+                    className="w-4 h-4 accent-brand-500 rounded cursor-pointer"
+                  />
+                </label>
+
+                {/* Multi-file Project */}
+                <label className="flex items-center justify-between p-3 rounded-2xl bg-slate-950/70 border border-slate-800 cursor-pointer">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-200">Multi-File Project</p>
+                    <p className="text-[10px] text-slate-500">Allow custom packages & extra files</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={allowMultiFile}
+                    onChange={(e) => setAllowMultiFile(e.target.checked)}
+                    className="w-4 h-4 accent-brand-500 rounded cursor-pointer"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Save Actions Box */}
+            <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl sticky top-6">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs md:text-sm font-bold shadow-xl shadow-brand-600/30 flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
+              >
+                <FontAwesomeIcon icon={isSubmitting ? faSpinner : faCheckCircle} className={isSubmitting ? 'animate-spin' : ''} />
+                <span>{isSubmitting ? 'Saving Task...' : 'Save Task to Bank'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push('/teacher/tasks')}
+                className="w-full py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors text-center"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Multi-Role Teacher Problem Engineering Suite IDE */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-base font-extrabold text-white flex items-center space-x-2">
+              <FontAwesomeIcon icon={faCode} className="text-emerald-400" />
+              <span>Teacher Problem Engineering IDE</span>
+            </h3>
+            <span className="text-xs text-slate-400">
+              Solution File • TestCase Generator • Codeforces Polygon Checker • Starter Template
+            </span>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Problem Description</label>
-            <textarea
-              rows={4}
-              required
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the problem, input formats, constraints, and time limits..."
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
-            />
-          </div>
+          <TeacherTaskEngineeringIDE
+            language={language}
+            solutionCode={solutionCode}
+            onSolutionCodeChange={setSolutionCode}
+            generatorCode={generatorCode}
+            onGeneratorCodeChange={setGeneratorCode}
+            templateCode={templateCode}
+            onTemplateCodeChange={setTemplateCode}
+            checkerConfig={checkerConfig}
+            onCheckerConfigChange={setCheckerConfig}
+            testCases={testCases}
+            onTestCasesChange={setTestCases}
+          />
+        </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">Allowed Programming Languages</label>
+        {/* Full-Width Evaluation Test Cases Suite Table & Manager */}
+        <div className="glass-panel p-6 md:p-8 rounded-3xl border border-slate-800 space-y-6 shadow-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center space-x-2.5">
+                <h3 className="text-base font-extrabold text-white flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faVial} className="text-emerald-400" />
+                  <span>Evaluation Test Cases Suite</span>
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  {testCases.length} Cases ({testCases.reduce((acc, t) => acc + (Number(t.points) || 0), 0)} pts)
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Evaluation test cases for student submissions evaluated with your configured checker.
+              </p>
+            </div>
+
             <div className="flex items-center space-x-3">
-              {['cpp', 'c', 'python', 'java'].map((lang) => (
-                <button
-                  key={lang}
-                  type="button"
-                  onClick={() => toggleLanguage(lang)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase border transition-all ${
-                    allowedLanguages.includes(lang)
-                      ? 'bg-brand-500/20 text-brand-400 border-brand-500/40'
-                      : 'bg-slate-900 text-slate-500 border-slate-800'
-                  }`}
-                >
-                  {lang}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Test Case Maker (Programmatic) */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
-              <FontAwesomeIcon icon={faCode} className="text-purple-500" />
-              <span>Reference Solution (Test Case Maker)</span>
-            </h3>
-            <select
-              value={referenceLanguage}
-              onChange={(e) => setReferenceLanguage(e.target.value)}
-              className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-brand-500"
-            >
-              <option value="cpp">C++</option>
-              <option value="c">C</option>
-              <option value="python">Python</option>
-              <option value="java">Java</option>
-              <option value="javascript">JavaScript</option>
-            </select>
-          </div>
-          <p className="text-xs text-slate-400">
-            Write a correct solution to programmatically generate the expected outputs for all your test case inputs. 
-            This saves time and avoids manual calculation errors.
-          </p>
-          <div className="relative border border-slate-800 rounded-xl overflow-hidden bg-slate-950">
-            <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
-              <span className="text-xs text-slate-400 font-mono">Solution Code</span>
-              <button
-                type="button"
-                onClick={() => setIsIdeOpen(true)}
-                className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center space-x-2 shadow-lg shadow-brand-500/20"
-              >
-                <FontAwesomeIcon icon={faCode} />
-                <span>Open IDE</span>
-              </button>
-            </div>
-            <pre className="p-4 text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap max-h-48 cursor-pointer hover:bg-slate-900/50 transition-colors" onClick={() => setIsIdeOpen(true)}>
-              {referenceSolution || `// No solution provided yet.\n// Click "Open IDE" to start writing your reference solution.`}
-            </pre>
-          </div>
-        </div>
-
-        {/* Test Cases Setup */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
-              <FontAwesomeIcon icon={faVial} className="text-tealAccent-500" />
-              <span>Automated Evaluation Test Cases ({testCases.length})</span>
-            </h3>
-            <div className="flex space-x-2">
-              <button
-                type="button"
-                onClick={handleGenerateOutputs}
-                disabled={isGeneratingOutputs}
-                className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-xs font-semibold flex items-center space-x-1 border border-purple-500/30 transition-colors disabled:opacity-50"
-              >
-                <FontAwesomeIcon icon={faCode} />
-                <span>{isGeneratingOutputs ? 'Generating...' : 'Generate Outputs'}</span>
-              </button>
               <button
                 type="button"
                 onClick={handleAddTestCase}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-tealAccent-400 text-xs font-semibold flex items-center space-x-1 border border-slate-700"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-lg shadow-emerald-600/30 transition-all"
               >
-                <FontAwesomeIcon icon={faPlusCircle} />
+                <FontAwesomeIcon icon={faPlus} />
                 <span>Add Test Case</span>
               </button>
             </div>
           </div>
 
-          <div className="space-y-3">
-            {testCases.map((tc, idx) => (
-              <div key={idx} className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-                  <span>Test Case #{idx + 1}</span>
-                  <div className="flex items-center space-x-3">
-                    <label className="flex items-center space-x-1.5 cursor-pointer text-slate-400">
-                      <input
-                        type="checkbox"
-                        checked={tc.isHidden}
-                        onChange={(e) => {
-                          const updated = [...testCases];
-                          updated[idx].isHidden = e.target.checked;
-                          setTestCases(updated);
-                        }}
-                        className="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-brand-500"
-                      />
-                      <span>Hidden Evaluation Case</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTestCase(idx)}
-                      className="text-rose-400 hover:text-rose-300"
-                    >
-                      <FontAwesomeIcon icon={faTrash} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">Standard Input (stdin)</label>
-                    <textarea
-                      rows={2}
-                      value={tc.input}
-                      onChange={(e) => {
-                        const updated = [...testCases];
-                        updated[idx].input = e.target.value;
-                        setTestCases(updated);
-                      }}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg font-mono text-xs text-tealAccent-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">Expected Output (stdout)</label>
-                    <textarea
-                      rows={2}
-                      value={tc.expectedOutput}
-                      onChange={(e) => {
-                        const updated = [...testCases];
-                        updated[idx].expectedOutput = e.target.value;
-                        setTestCases(updated);
-                      }}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg font-mono text-xs text-emerald-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">Points</label>
-                    <input
-                      type="number"
-                      value={tc.points}
-                      onChange={(e) => {
-                        const updated = [...testCases];
-                        updated[idx].points = Number(e.target.value);
-                        setTestCases(updated);
-                      }}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg font-mono text-xs text-slate-300 focus:border-brand-500 outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-bold text-xs shadow-lg shadow-brand-600/30 flex items-center justify-center space-x-2 transition-all"
-        >
-          <FontAwesomeIcon icon={faCheckCircle} />
-          <span>{isSubmitting ? 'Publishing Problem...' : 'Publish Problem'}</span>
-        </button>
-      </form>
-
-      {/* Full-Page IDE Modal */}
-      {isIdeOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 animate-in fade-in zoom-in-95 duration-200">
-          {/* Modal Header */}
-          <div className="h-16 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center border border-brand-500/30">
-                <FontAwesomeIcon icon={faCode} className="text-brand-400 text-lg" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-white leading-tight">Reference Solution IDE</h2>
-                <p className="text-xs text-slate-400">Write your solution to generate test case outputs</p>
-              </div>
+          {/* Test Case Cards */}
+          {testCases.length === 0 ? (
+            <div className="p-8 rounded-2xl border border-dashed border-slate-800 text-center space-y-2">
+              <FontAwesomeIcon icon={faVial} className="text-3xl text-slate-600" />
+              <p className="text-xs font-bold text-slate-300">No test cases added yet</p>
+              <p className="text-[11px] text-slate-500">
+                Click "Add Test Case" above or use the "TestCase Maker Script" in the IDE to generate cases automatically.
+              </p>
             </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
-                <span className="text-xs font-semibold text-slate-400">Language:</span>
-                <select
-                  value={referenceLanguage}
-                  onChange={(e) => setReferenceLanguage(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-200 focus:outline-none"
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {testCases.map((tc, index) => (
+                <div
+                  key={tc.id || index}
+                  className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800/90 space-y-4"
                 >
-                  <option value="cpp">C++</option>
-                  <option value="c">C</option>
-                  <option value="python">Python</option>
-                  <option value="java">Java</option>
-                  <option value="javascript">JavaScript</option>
-                </select>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsIdeOpen(false)}
-                className="px-6 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-brand-500/20 flex items-center space-x-2"
-              >
-                <FontAwesomeIcon icon={faCheckCircle} />
-                <span>Done Coding</span>
-              </button>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold font-mono">
+                        #{index + 1}
+                      </span>
+                      <span className="text-xs font-bold text-white">Test Case #{index + 1}</span>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      {/* Hidden Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateTestCase(index, 'isHidden', !tc.isHidden)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 border transition-all ${
+                          tc.isHidden
+                            ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                            : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                        }`}
+                      >
+                        <FontAwesomeIcon icon={tc.isHidden ? faEyeSlash : faEye} className="text-[10px]" />
+                        <span>{tc.isHidden ? 'Hidden Test' : 'Visible Sample'}</span>
+                      </button>
+
+                      {/* Points */}
+                      <div className="flex items-center space-x-1">
+                        <input
+                          type="number"
+                          min="1"
+                          value={tc.points}
+                          onChange={(e) => handleUpdateTestCase(index, 'points', Number(e.target.value))}
+                          className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white text-center font-bold"
+                        />
+                        <span className="text-xs text-slate-500 font-semibold">pts</span>
+                      </div>
+
+                      {/* Delete */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTestCase(index)}
+                        className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors text-xs"
+                      >
+                        <FontAwesomeIcon icon={faTrash} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                        Standard Input (stdin)
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={tc.inputData}
+                        onChange={(e) => handleUpdateTestCase(index, 'inputData', e.target.value)}
+                        placeholder="Leave empty if no standard input is required..."
+                        className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                        Expected Output (stdout) <span className="text-rose-400">*</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        required
+                        value={tc.expectedOutput}
+                        onChange={(e) => handleUpdateTestCase(index, 'expectedOutput', e.target.value)}
+                        placeholder="Exact expected standard output..."
+                        className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-400 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-          
-          {/* Monaco Editor */}
-          <div className="flex-1 w-full min-h-0 bg-[#1e1e1e] flex flex-col">
-            <EduCodeEditor
-              context="assignments"
-              language={referenceLanguage === 'c' ? 'cpp' : referenceLanguage}
-              value={referenceSolution}
-              onChange={(value) => setReferenceSolution(value || '')}
-            />
-          </div>
+          )}
         </div>
-      )}
+      </form>
     </div>
   );
 }

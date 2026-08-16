@@ -1,4 +1,9 @@
 import { WorkspaceFile } from '@/components/FileExplorer';
+import {
+  evaluateTestCaseOutput,
+  CheckerConfig,
+  DEFAULT_CHECKER_CONFIG,
+} from '@/utils/testCaseChecker';
 
 export type TestCaseStatus =
   | 'PENDING'
@@ -73,7 +78,7 @@ export function normalizeOutput(text: string | null | undefined): string {
 }
 
 /**
- * Runs a single testcase against the code/workspace
+ * Runs a single testcase against the code/workspace using the configured checker
  */
 export async function runSingleTestCase(
   testCase: TestCaseInput,
@@ -83,7 +88,8 @@ export async function runSingleTestCase(
   language: string,
   workspaceFiles: WorkspaceFile[] = [],
   activeFilePath?: string,
-  timeoutMs: number = 10000
+  timeoutMs: number = 10000,
+  checkerConfig: CheckerConfig = DEFAULT_CHECKER_CONFIG
 ): Promise<TestCaseResult> {
   const maxPoints = testCase.points ?? 10;
   const orderNum = testCase.order ?? index + 1;
@@ -120,9 +126,6 @@ export async function runSingleTestCase(
       timeMs = Math.floor(Math.random() * 25) + 15;
     }
 
-    const normActual = normalizeOutput(stdout);
-    const normExpected = normalizeOutput(testCase.expectedOutput);
-
     let status: TestCaseStatus = 'PASSED';
     let logMessage = '';
     let errorDetails: string | undefined = undefined;
@@ -140,14 +143,26 @@ export async function runSingleTestCase(
       status = 'RUNTIME_ERROR';
       errorDetails = stderr || `Process exited with code ${exitCode}`;
       logMessage = `runtime error on test case ${orderNum}`;
-    } else if (normActual === normExpected) {
-      status = 'PASSED';
-      passed = true;
-      logMessage = `pass ${orderNum}/${total}`;
     } else {
-      status = 'WRONG_ANSWER';
-      errorDetails = `Output mismatch:\nExpected:\n${normExpected}\n\nGot:\n${normActual}`;
-      logMessage = `wrong answer on test case ${orderNum}`;
+      // Run Polygon-style checker evaluation
+      const verdict = await evaluateTestCaseOutput(
+        stdout,
+        testCase.expectedOutput,
+        testCase.inputData || '',
+        checkerConfig
+      );
+
+      if (verdict.passed) {
+        status = 'PASSED';
+        passed = true;
+        logMessage = `pass ${orderNum}/${total}`;
+      } else {
+        status = 'WRONG_ANSWER';
+        errorDetails = verdict.diffDetails
+          ? `${verdict.message}\n\n${verdict.diffDetails}`
+          : verdict.message;
+        logMessage = `wrong answer on test case ${orderNum}`;
+      }
     }
 
     return {
@@ -186,7 +201,7 @@ export async function runSingleTestCase(
 }
 
 /**
- * Runs all test cases sequentially and triggers progress callbacks
+ * Runs the entire testcase suite sequentially with live progress and returns summary
  */
 export async function runAllTestCases(
   testCases: TestCaseInput[],
@@ -194,31 +209,45 @@ export async function runAllTestCases(
   language: string,
   workspaceFiles: WorkspaceFile[] = [],
   activeFilePath?: string,
-  onProgress?: (progress: TestSuiteProgress) => void
+  onProgress?: (progress: TestSuiteProgress) => void,
+  timeoutMs: number = 10000,
+  checkerConfig: CheckerConfig = DEFAULT_CHECKER_CONFIG
 ): Promise<TestSuiteSummary> {
   const results: TestCaseResult[] = [];
   const logs: string[] = [];
   let passedCount = 0;
   let failedCount = 0;
-  let earnedPoints = 0;
-  let totalPoints = 0;
   let totalTimeMs = 0;
+  let earnedPoints = 0;
+  const totalPoints = testCases.reduce((acc, t) => acc + (t.points ?? 10), 0);
+  const totalCount = testCases.length;
 
-  const total = testCases.length;
-  logs.push(`🚀 Starting evaluation on ${total} test case${total === 1 ? '' : 's'}...`);
+  if (totalCount === 0) {
+    return {
+      totalCount: 0,
+      passedCount: 0,
+      failedCount: 0,
+      totalPoints: 0,
+      earnedPoints: 0,
+      totalTimeMs: 0,
+      status: 'ALL_PASSED',
+      results: [],
+      logs: ['No test cases configured for this task.'],
+    };
+  }
 
-  for (let i = 0; i < total; i++) {
+  for (let i = 0; i < totalCount; i++) {
     const tc = testCases[i];
-    totalPoints += tc.points ?? 10;
-
     const res = await runSingleTestCase(
       tc,
       i,
-      total,
+      totalCount,
       code,
       language,
       workspaceFiles,
-      activeFilePath
+      activeFilePath,
+      timeoutMs,
+      checkerConfig
     );
 
     results.push(res);
@@ -227,16 +256,16 @@ export async function runAllTestCases(
     if (res.passed) {
       passedCount++;
       earnedPoints += res.points;
-      logs.push(`✅ ${res.logMessage} (${res.timeMs}ms)`);
     } else {
       failedCount++;
-      logs.push(`❌ ${res.logMessage}`);
     }
+
+    logs.push(res.logMessage);
 
     if (onProgress) {
       onProgress({
         currentIndex: i + 1,
-        totalCount: total,
+        totalCount,
         passedCount,
         failedCount,
         currentResult: res,
@@ -244,29 +273,33 @@ export async function runAllTestCases(
         logs: [...logs],
       });
     }
+
+    // Stop execution early on severe compilation error across suite
+    if (res.status === 'COMPILATION_ERROR') {
+      break;
+    }
   }
 
-  const allPassed = passedCount === total && total > 0;
-  const anyPassed = passedCount > 0;
-  const status = allPassed
-    ? 'ALL_PASSED'
-    : anyPassed
-    ? 'PARTIAL_PASSED'
-    : results.some((r) => r.status === 'COMPILATION_ERROR')
-    ? 'COMPILATION_ERROR'
-    : 'FAILED';
+  let finalStatus: 'ALL_PASSED' | 'PARTIAL_PASSED' | 'FAILED' | 'COMPILATION_ERROR' = 'FAILED';
+  if (results.some((r) => r.status === 'COMPILATION_ERROR')) {
+    finalStatus = 'COMPILATION_ERROR';
+  } else if (passedCount === totalCount && totalCount > 0) {
+    finalStatus = 'ALL_PASSED';
+  } else if (passedCount > 0) {
+    finalStatus = 'PARTIAL_PASSED';
+  }
 
-  const summaryLog = `🏁 Evaluation finished: ${passedCount}/${total} passed • ${earnedPoints}/${totalPoints} pts (${totalTimeMs}ms)`;
+  const summaryLog = `🏁 Evaluation finished: ${passedCount}/${totalCount} passed • ${earnedPoints}/${totalPoints} pts (${totalTimeMs}ms)`;
   logs.push(summaryLog);
 
   return {
-    totalCount: total,
+    totalCount,
     passedCount,
     failedCount,
     totalPoints,
     earnedPoints,
     totalTimeMs,
-    status,
+    status: finalStatus,
     results,
     logs,
   };

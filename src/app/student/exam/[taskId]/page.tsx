@@ -41,6 +41,7 @@ import {
   TestSuiteSummary,
   runAllTestCases,
 } from '@/utils/testCaseRunner';
+import { DEFAULT_CHECKER_CONFIG } from '@/utils/testCaseChecker';
 import TestCaseRunnerPanel from '@/components/TestCaseRunnerPanel';
 import { validateCodeSyntax, parseCompilerErrors, SyntaxMarker } from '@/utils/syntaxValidator';
 import type { Monaco } from '@monaco-editor/react';
@@ -682,6 +683,8 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
     setIsFullFocus(false);
 
     try {
+      const checkerConfig = DEFAULT_CHECKER_CONFIG;
+
       const summary = await runAllTestCases(
         testCases,
         code,
@@ -710,7 +713,9 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
               logs: progress.logs,
             };
           });
-        }
+        },
+        10000,
+        checkerConfig
       );
       setTestSummary(summary);
     } catch (err) {

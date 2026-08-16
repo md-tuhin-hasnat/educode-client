@@ -19,12 +19,14 @@ import {
   faTimes,
   faCheck,
   faCopy,
+  faScaleBalanced,
 } from '@fortawesome/free-solid-svg-icons';
 import {
   TestCaseInput,
   TestCaseResult,
   TestSuiteSummary,
 } from '@/utils/testCaseRunner';
+import { CheckerConfig } from '@/utils/testCaseChecker';
 
 interface TestCaseRunnerPanelProps {
   testCases: TestCaseInput[];
@@ -33,6 +35,7 @@ interface TestCaseRunnerPanelProps {
   onRunAll: () => void;
   onClose?: () => void;
   onAddCustomTestCase?: (tc: TestCaseInput) => void;
+  checkerConfig?: CheckerConfig;
 }
 
 export default function TestCaseRunnerPanel({
@@ -42,6 +45,7 @@ export default function TestCaseRunnerPanel({
   onRunAll,
   onClose,
   onAddCustomTestCase,
+  checkerConfig,
 }: TestCaseRunnerPanelProps) {
   const [expandedId, setExpandedId] = useState<string | number | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'PASSED' | 'FAILED'>('ALL');
@@ -120,6 +124,23 @@ export default function TestCaseRunnerPanel({
               </span>
               <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[11px] font-mono border border-slate-700">
                 {earnedPoints}/{totalPoints} pts
+              </span>
+            </div>
+          )}
+
+          {checkerConfig && (
+            <div className="hidden sm:flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border bg-slate-800/80 border-slate-700 text-slate-300">
+              <FontAwesomeIcon icon={faScaleBalanced} className="text-brand-400 text-[10px]" />
+              <span>
+                {checkerConfig.type === 'FLOAT_TOLERANCE'
+                  ? `Float Tolerance (ε ≤ ${checkerConfig.floatTolerance ?? 1e-6})`
+                  : checkerConfig.type === 'CASE_INSENSITIVE'
+                  ? 'Case-Insensitive'
+                  : checkerConfig.type === 'UNORDERED_TOKENS'
+                  ? 'Unordered Multiset'
+                  : checkerConfig.type === 'CUSTOM_SCRIPT'
+                  ? 'Polygon Script'
+                  : 'Exact Match'}
               </span>
             </div>
           )}

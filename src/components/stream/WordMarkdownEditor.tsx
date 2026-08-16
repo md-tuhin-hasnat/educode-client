@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Editor from '@monaco-editor/react';
 import '@/lib/monacoInit';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -31,6 +32,12 @@ import { CodeBlockItem } from './PostContentRenderer';
 import { apiClient } from '@/config/api';
 import { registerMonacoThemes, getActiveThemeId } from '../themes';
 import { doesCodeRequireStdin } from '@/utils/syntaxValidator';
+import {
+  renderLatex,
+  createInteractiveEquationHtml,
+  latexToInteractivePills,
+  interactivePillsToLatex,
+} from '@/utils/mathRenderer';
 
 
 export interface WordMarkdownEditorProps {
@@ -82,7 +89,7 @@ function parseInitialContent(val: string, initialCodeBlocks?: CodeBlockItem[]): 
       cells.push({
         id: `txt_${Math.random().toString(36).substring(5)}`,
         type: 'text',
-        content: formattedText,
+        content: latexToInteractivePills(formattedText),
       });
     }
 
@@ -113,7 +120,7 @@ function parseInitialContent(val: string, initialCodeBlocks?: CodeBlockItem[]): 
     cells.push({
       id: `txt_${Math.random().toString(36).substring(5)}`,
       type: 'text',
-      content: formattedText,
+      content: latexToInteractivePills(formattedText),
     });
   }
 
@@ -145,6 +152,8 @@ interface RichTextCellComponentProps {
   placeholder: string;
   onTextChange: (id: string, htmlContent: string) => void;
   onFocus: (editableEl: HTMLDivElement) => void;
+  onSaveSelection: (cellId: string, range: Range, el: HTMLDivElement) => void;
+  onEditEquation?: (cellId: string, element: HTMLElement, latex: string, mode: 'inline' | 'block') => void;
   onRemoveCell: (id: string) => void;
   canRemove: boolean;
   mentionableUsers?: { id: string; name: string; avatarUrl?: string; role?: string }[];
@@ -155,6 +164,8 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
   placeholder,
   onTextChange,
   onFocus,
+  onSaveSelection,
+  onEditEquation,
   onRemoveCell,
   canRemove,
   mentionableUsers,
@@ -177,12 +188,20 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
     return mentionableUsers.filter(u => u.name.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q));
   }, [mentionState.active, mentionState.query, mentionableUsers]);
 
+  const saveCurrentSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && divRef.current) {
+      const range = sel.getRangeAt(0);
+      if (divRef.current.contains(range.commonAncestorContainer)) {
+        onSaveSelection(cell.id, range.cloneRange(), divRef.current);
+      }
+    }
+  };
+
   const handleMentionSelect = (user: { id: string; name: string }) => {
     if (!mentionState.node) return;
     const range = document.createRange();
     
-    // We matched /(?:^|\s)@([a-zA-Z0-9_]*)$/
-    // We just want to replace the `@...` part, which is length of query + 1
     range.setStart(mentionState.node, mentionState.offset - mentionState.query.length - 1);
     range.setEnd(mentionState.node, mentionState.offset);
     range.deleteContents();
@@ -205,6 +224,7 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
     if (sel) {
       sel.removeAllRanges();
       sel.addRange(newRange);
+      saveCurrentSelection();
     }
 
     setMentionState(prev => ({ ...prev, active: false }));
@@ -214,6 +234,7 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
   };
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    saveCurrentSelection();
     onTextChange(cell.id, e.currentTarget.innerHTML);
     
     const sel = window.getSelection();
@@ -252,21 +273,102 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    saveCurrentSelection();
     if (mentionState.active && filteredUsers.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setMentionState(prev => ({ ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, filteredUsers.length - 1) }));
+        return;
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setMentionState(prev => ({ ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) }));
+        return;
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (filteredUsers[mentionState.selectedIndex]) {
           handleMentionSelect(filteredUsers[mentionState.selectedIndex]);
         }
+        return;
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setMentionState(prev => ({ ...prev, active: false }));
+        return;
+      }
+    }
+
+    if (e.key === ' ' || e.key === 'Enter') {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        if (range.collapsed && range.startContainer.nodeType === Node.TEXT_NODE) {
+          const text = range.startContainer.textContent || '';
+          const offset = range.startOffset;
+          const textBefore = text.substring(0, offset);
+
+          // Check for block math: $$...$$
+          const blockMatch = textBefore.match(/\$\$([^\$]+)\$\$$/);
+          if (blockMatch) {
+            e.preventDefault();
+            const latex = blockMatch[1].trim();
+            const matchStart = offset - blockMatch[0].length;
+            
+            range.setStart(range.startContainer, matchStart);
+            range.setEnd(range.startContainer, offset);
+            range.deleteContents();
+
+            const tempWrapper = document.createElement('div');
+            tempWrapper.innerHTML = createInteractiveEquationHtml(latex, 'block');
+            const pill = tempWrapper.firstElementChild as HTMLElement;
+
+            const pNode = document.createElement('p');
+            pNode.innerHTML = '<br/>';
+
+            range.insertNode(pNode);
+            range.insertNode(pill);
+
+            const newRange = document.createRange();
+            newRange.setStart(pNode, 0);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+            saveCurrentSelection();
+            if (divRef.current) {
+              onTextChange(cell.id, divRef.current.innerHTML);
+            }
+            return;
+          }
+
+          // Check for inline math: $...$
+          const inlineMatch = textBefore.match(/(?<!\\)\$([^\$\s][^\$]*)\$$/);
+          if (inlineMatch) {
+            e.preventDefault();
+            const latex = inlineMatch[1].trim();
+            const matchStart = offset - inlineMatch[0].length;
+
+            range.setStart(range.startContainer, matchStart);
+            range.setEnd(range.startContainer, offset);
+            range.deleteContents();
+
+            const tempWrapper = document.createElement('div');
+            tempWrapper.innerHTML = createInteractiveEquationHtml(latex, 'inline');
+            const pill = tempWrapper.firstElementChild as HTMLElement;
+
+            const spaceNode = document.createTextNode('\u00A0');
+            range.insertNode(spaceNode);
+            range.insertNode(pill);
+
+            const newRange = document.createRange();
+            newRange.setStartAfter(spaceNode);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+            saveCurrentSelection();
+            if (divRef.current) {
+              onTextChange(cell.id, divRef.current.innerHTML);
+            }
+            return;
+          }
+        }
       }
     }
   };
@@ -275,8 +377,6 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
     e.preventDefault();
     let pastedData = e.clipboardData.getData('text/html');
     if (pastedData) {
-      // Basic sanitization to strip inline styles, classes, and meta/style tags
-      // This ensures pasted content from VS Code or other IDEs inherits our theme.
       pastedData = pastedData.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
       pastedData = pastedData.replace(/<meta[^>]*>/gi, '');
       pastedData = pastedData.replace(/\sstyle="[^"]*"/gi, '');
@@ -284,11 +384,35 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
       pastedData = pastedData.replace(/\sclass="[^"]*"/gi, '');
       pastedData = pastedData.replace(/\sclass='[^']*'/gi, '');
       
-      document.execCommand('insertHTML', false, pastedData);
+      const converted = latexToInteractivePills(pastedData);
+      document.execCommand('insertHTML', false, converted);
     } else {
       const text = e.clipboardData.getData('text/plain');
-      document.execCommand('insertText', false, text);
+      const converted = latexToInteractivePills(text);
+      if (converted !== text) {
+        document.execCommand('insertHTML', false, converted);
+      } else {
+        document.execCommand('insertText', false, text);
+      }
     }
+    saveCurrentSelection();
+    if (divRef.current) {
+      onTextChange(cell.id, divRef.current.innerHTML);
+    }
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const pill = target.closest('[data-latex]') as HTMLElement;
+    if (pill) {
+      e.preventDefault();
+      e.stopPropagation();
+      const latex = decodeURIComponent(pill.getAttribute('data-latex') || '');
+      const mode = (pill.getAttribute('data-mode') || 'inline') as 'inline' | 'block';
+      onEditEquation?.(cell.id, pill, latex, mode);
+      return;
+    }
+    saveCurrentSelection();
   };
 
   useEffect(() => {
@@ -319,17 +443,31 @@ const RichTextCellComponent: React.FC<RichTextCellComponentProps> = ({
         onFocus={(e) => {
           setIsFocused(true);
           onFocus(e.currentTarget);
+          saveCurrentSelection();
         }}
         onBlur={(e) => {
-          // Delay to allow click on dropdown to register
           setTimeout(() => {
             setIsFocused(false);
             setMentionState(prev => ({ ...prev, active: false }));
           }, 200);
-          onTextChange(cell.id, e.currentTarget.innerHTML);
+
+          // Auto-convert raw $r$ or $$...$$ typed into rendered KaTeX pills on blur
+          const currentHtml = e.currentTarget.innerHTML;
+          const converted = latexToInteractivePills(currentHtml);
+          if (converted !== currentHtml) {
+            e.currentTarget.innerHTML = converted;
+            onTextChange(cell.id, converted);
+          } else {
+            onTextChange(cell.id, currentHtml);
+          }
         }}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
+        onKeyUp={saveCurrentSelection}
+        onMouseUp={saveCurrentSelection}
+        onPointerUp={saveCurrentSelection}
+        onSelect={saveCurrentSelection}
+        onClick={handleClick}
         onPaste={handlePaste}
         style={{ minHeight: '60px', direction: 'ltr', textAlign: 'left' }}
         className="w-full bg-transparent text-slate-100 focus:outline-none leading-relaxed text-sm p-3 rounded-xl hover:bg-slate-900/40 focus:bg-slate-900/60 transition-colors font-sans outline-none text-left [&_*]:text-left [&_h1]:text-2xl [&_h1]:font-black [&_h1]:text-white [&_h1]:mt-4 [&_h1]:mb-2 [&_h1:first-child]:mt-0 [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-white [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-slate-100 [&_h3]:mt-2.5 [&_h3]:mb-1 [&_h3:first-child]:mt-0 [&_p]:text-left [&_p]:mt-0 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:my-2.5 [&_ul:first-child]:mt-0 [&_ul:last-child]:mb-0 [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:text-left [&_ol]:my-2.5 [&_ol:first-child]:mt-0 [&_ol:last-child]:mb-0 [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:text-left [&_li]:my-0.5 [&_li]:text-left [&_blockquote]:my-2.5 [&_blockquote:first-child]:mt-0 [&_blockquote:last-child]:mb-0 [&_blockquote]:border-l-4 [&_blockquote]:border-teal-500 [&_blockquote]:pl-3.5 [&_blockquote]:italic [&_blockquote]:text-slate-300 [&_blockquote]:text-left [&_table]:my-3 [&_table:first-child]:mt-0 [&_table:last-child]:mb-0 [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-slate-800 [&_th]:border [&_th]:border-slate-800 [&_th]:p-2 [&_th]:bg-slate-900 [&_th]:text-left [&_td]:border [&_td]:border-slate-800 [&_td]:p-2 [&_td]:text-left"
@@ -416,6 +554,151 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
 
   const [cellExecutions, setCellExecutions] = useState<Record<string, CellExecutionState>>({});
   const [activeTheme, setActiveTheme] = useState<string>('educode-dark');
+  const [isEquationModalOpen, setIsEquationModalOpen] = useState(false);
+  const [equationInput, setEquationInput] = useState('O(N \\log N)');
+  const [equationMode, setEquationMode] = useState<'inline' | 'block'>('inline');
+
+  const activeEditableRef = useRef<HTMLDivElement | null>(null);
+  const savedSelectionRef = useRef<{ cellId: string; range: Range; el: HTMLDivElement } | null>(null);
+  const editingEquationPillRef = useRef<{ cellId: string; element: HTMLElement } | null>(null);
+
+  const handleOpenEquationModal = (prefillLatex?: string, prefillMode?: 'inline' | 'block') => {
+    if (prefillLatex !== undefined) {
+      setEquationInput(prefillLatex);
+    } else if (savedSelectionRef.current) {
+      const selectedText = savedSelectionRef.current.range.toString().trim();
+      if (selectedText) {
+        setEquationInput(selectedText.replace(/^\$+|\$+$/g, ''));
+      } else {
+        setEquationInput('r');
+      }
+    } else {
+      setEquationInput('r');
+    }
+
+    if (prefillMode !== undefined) {
+      setEquationMode(prefillMode);
+    } else {
+      setEquationMode('inline');
+    }
+
+    setIsEquationModalOpen(true);
+  };
+
+  const handleEditExistingEquation = (cellId: string, element: HTMLElement, latex: string, mode: 'inline' | 'block') => {
+    editingEquationPillRef.current = { cellId, element };
+    handleOpenEquationModal(latex, mode);
+  };
+
+  const handleDeleteExistingEquation = () => {
+    if (editingEquationPillRef.current) {
+      const { cellId, element } = editingEquationPillRef.current;
+      const parent = element.parentElement;
+      element.remove();
+      if (parent) {
+        const editableRoot = (parent.closest('[contenteditable="true"]') || parent) as HTMLDivElement;
+        if (editableRoot) {
+          handleTextChange(cellId, editableRoot.innerHTML);
+        }
+      }
+      editingEquationPillRef.current = null;
+      setIsEquationModalOpen(false);
+    }
+  };
+
+  const handleInsertEquationSubmit = () => {
+    if (!equationInput.trim()) return;
+    const latex = equationInput.trim();
+    const isBlock = equationMode === 'block';
+
+    // Case 1: Updating an existing equation pill
+    if (editingEquationPillRef.current) {
+      const { cellId, element } = editingEquationPillRef.current;
+      const parent = element.parentElement;
+      if (parent) {
+        const tempWrapper = document.createElement('div');
+        tempWrapper.innerHTML = createInteractiveEquationHtml(latex, equationMode);
+        const newPill = tempWrapper.firstElementChild;
+        if (newPill) {
+          element.replaceWith(newPill);
+          const editableRoot = (parent.closest('[contenteditable="true"]') || parent) as HTMLDivElement;
+          if (editableRoot) {
+            handleTextChange(cellId, editableRoot.innerHTML);
+          }
+        }
+      }
+      editingEquationPillRef.current = null;
+      setIsEquationModalOpen(false);
+      return;
+    }
+
+    // Case 2: Inserting a new equation at saved cursor position
+    if (savedSelectionRef.current) {
+      const { cellId, range, el } = savedSelectionRef.current;
+      
+      // Focus target element and restore selection
+      el.focus();
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      const tempWrapper = document.createElement('div');
+      tempWrapper.innerHTML = createInteractiveEquationHtml(latex, equationMode);
+      const pill = tempWrapper.firstElementChild as HTMLElement;
+
+      if (pill) {
+        range.deleteContents();
+        range.insertNode(pill);
+
+        if (isBlock) {
+          const pNode = document.createElement('p');
+          pNode.innerHTML = '<br/>';
+          if (pill.nextSibling) {
+            pill.parentNode?.insertBefore(pNode, pill.nextSibling);
+          } else {
+            pill.parentNode?.appendChild(pNode);
+          }
+          
+          const newRange = document.createRange();
+          newRange.setStart(pNode, 0);
+          newRange.collapse(true);
+          sel?.removeAllRanges();
+          sel?.addRange(newRange);
+          savedSelectionRef.current = { cellId, range: newRange.cloneRange(), el };
+        } else {
+          const spaceNode = document.createTextNode('\u00A0');
+          pill.after(spaceNode);
+          
+          const newRange = document.createRange();
+          newRange.setStartAfter(spaceNode);
+          newRange.collapse(true);
+          sel?.removeAllRanges();
+          sel?.addRange(newRange);
+          savedSelectionRef.current = { cellId, range: newRange.cloneRange(), el };
+        }
+
+        handleTextChange(cellId, el.innerHTML);
+      }
+    } else {
+      // Fallback: Append to first text cell
+      const firstTextCell = cells.find((c) => c.type === 'text');
+      if (firstTextCell) {
+        const pillHtml = createInteractiveEquationHtml(latex, equationMode);
+        const updatedContent = (firstTextCell.content || '') + (isBlock ? `\n${pillHtml}\n` : ` ${pillHtml} `);
+        handleTextChange(firstTextCell.id, updatedContent);
+      }
+    }
+
+    setIsEquationModalOpen(false);
+  };
+
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setActiveTheme(getActiveThemeId());
@@ -430,7 +713,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
           return {
             ...prev,
             [cell.id]: {
-              ...(current || { isRunning: false, stdin: '', result: null }),
+              ...(current || { isRunning: false, stdin: '', result: null, showOutput: false }),
               showStdin: true,
               showOutput: true,
             },
@@ -439,7 +722,6 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
       }
     });
   }, [cells]);
-
 
   const handleInlineTestRun = async (cellId: string, code: string, lang: string) => {
     // If external listener is explicitly provided and handles it, call it
@@ -528,6 +810,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
       if (c.id === cellId) {
         return {
           ...c,
+          hasInput: isChecked,
           stdin: isChecked ? currentVal : undefined,
         };
       }
@@ -537,20 +820,35 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
     syncCellsToParent(updated);
   };
 
-  const toggleStdin = (cellId: string) => {
+  const handleClearOutput = (cellId: string) => {
     setCellExecutions((prev) => {
-      const curr = prev[cellId] || { isRunning: false, stdin: '', showStdin: false, result: null, showOutput: false };
+      const curr = prev[cellId];
+      if (!curr) return prev;
       return {
         ...prev,
         [cellId]: {
           ...curr,
-          showStdin: !curr.showStdin,
+          result: null,
         },
       };
     });
   };
 
-  const closeOutput = (cellId: string) => {
+  const handleToggleStdin = (cellId: string) => {
+    setCellExecutions((prev) => {
+      const curr = prev[cellId];
+      const show = !curr?.showStdin;
+      return {
+        ...prev,
+        [cellId]: {
+          ...(curr || { isRunning: false, stdin: '', result: null, showOutput: false }),
+          showStdin: show,
+        },
+      };
+    });
+  };
+
+  const handleHideOutput = (cellId: string) => {
     setCellExecutions((prev) => {
       const curr = prev[cellId];
       if (!curr) return prev;
@@ -564,16 +862,15 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
     });
   };
 
-  const activeEditableRef = useRef<HTMLDivElement | null>(null);
-
   const syncCellsToParent = (currentCells: EditorCell[]) => {
     let combinedBody = '';
     const currentCodeBlocks: CodeBlockItem[] = [];
 
     currentCells.forEach((cell) => {
       if (cell.type === 'text') {
-        if (cell.content.trim()) {
-          combinedBody += (combinedBody ? '\n\n' : '') + cell.content.trim();
+        const portableLatex = interactivePillsToLatex(cell.content).trim();
+        if (portableLatex) {
+          combinedBody += (combinedBody ? '\n\n' : '') + portableLatex;
         }
       } else if (cell.type === 'code') {
         const codeMd = `\n\n\`\`\`${cell.language || 'cpp'}\n${cell.content}\n\`\`\`\n\n`;
@@ -690,7 +987,17 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
   };
 
   const execFormat = (command: string, val: string | undefined = undefined) => {
-    if (activeEditableRef.current) {
+    if (savedSelectionRef.current) {
+      const { cellId, range, el } = savedSelectionRef.current;
+      el.focus();
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      document.execCommand(command, false, val);
+      handleTextChange(cellId, el.innerHTML);
+    } else if (activeEditableRef.current) {
       activeEditableRef.current.focus();
       document.execCommand(command, false, val);
       const textId = activeEditableRef.current.getAttribute('data-cell-id');
@@ -730,6 +1037,24 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
     }
   };
 
+  const handleRenderAllFormulasInActiveCell = () => {
+    if (activeEditableRef.current) {
+      const currentHtml = activeEditableRef.current.innerHTML;
+      const converted = latexToInteractivePills(currentHtml);
+      activeEditableRef.current.innerHTML = converted;
+      const textId = activeEditableRef.current.getAttribute('data-cell-id');
+      if (textId) {
+        handleTextChange(textId, converted);
+      }
+    } else {
+      const updated = cells.map((c) =>
+        c.type === 'text' ? { ...c, content: latexToInteractivePills(c.content) } : c
+      );
+      setCells(updated);
+      syncCellsToParent(updated);
+    }
+  };
+
   return (
     <div className="w-full space-y-4 font-sans select-text text-left" dir="ltr">
       {/* Clean Toolbar */}
@@ -739,6 +1064,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
           <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('formatBlock', '<h1>')}
               className="px-2.5 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs font-black transition-colors"
               title="Heading 1"
@@ -747,6 +1073,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('formatBlock', '<h2>')}
               className="px-2.5 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs font-bold transition-colors"
               title="Heading 2"
@@ -755,6 +1082,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('formatBlock', '<p>')}
               className="px-2 py-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg text-xs transition-colors"
               title="Paragraph"
@@ -766,6 +1094,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
           <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('bold')}
               className="p-1.5 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors font-bold"
               title="Bold"
@@ -774,6 +1103,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('italic')}
               className="p-1.5 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors italic"
               title="Italic"
@@ -782,6 +1112,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('underline')}
               className="p-1.5 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors underline"
               title="Underline"
@@ -790,6 +1121,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() =>
                 execFormat(
                   'insertHTML',
@@ -806,6 +1138,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
           <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('insertUnorderedList')}
               className="p-1.5 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors"
               title="Bullet List"
@@ -814,6 +1147,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => execFormat('insertOrderedList')}
               className="p-1.5 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors"
               title="Numbered List"
@@ -822,6 +1156,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleInsertTable}
               className="p-1.5 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors"
               title="Insert Table"
@@ -830,11 +1165,31 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleInsertLink}
               className="p-1.5 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors"
               title="Insert Link"
             >
               <FontAwesomeIcon icon={faLink} />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleOpenEquationModal()}
+              className="p-1.5 px-2.5 text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 rounded-lg text-xs transition-colors font-serif font-bold flex items-center space-x-1 border border-emerald-500/30 bg-emerald-500/10"
+              title="Insert Mathematical Equation / Formula at cursor ($...$)"
+            >
+              <span className="italic">f(x)</span>
+              <span className="text-[11px] font-sans font-medium">Math</span>
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleRenderAllFormulasInActiveCell}
+              className="p-1.5 px-2 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 rounded-lg text-xs transition-colors font-sans"
+              title="Auto-format / Render all raw LaTeX expressions in text"
+            >
+              <FontAwesomeIcon icon={faCheckCircle} className="text-emerald-400 text-[11px]" />
             </button>
           </div>
         </div>
@@ -863,7 +1218,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
       </div>
 
       {/* Editor Cells Container Sheet */}
-      <div className="bg-slate-950 border border-slate-800/90 rounded-3xl p-6 shadow-2xl space-y-4 max-w-5xl mx-auto min-h-[400px] text-left" dir="ltr">
+      <div className="bg-slate-950 border border-slate-800/90 rounded-2xl p-4 md:p-5 shadow-xl space-y-2 w-full text-left" dir="ltr">
         {cells.map((cell, idx) => (
           <React.Fragment key={cell.id}>
             {cell.type === 'text' ? (
@@ -874,8 +1229,13 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
                 onFocus={(el) => {
                   activeEditableRef.current = el;
                 }}
+                onSaveSelection={(cellId, range, el) => {
+                  savedSelectionRef.current = { cellId, range, el };
+                  activeEditableRef.current = el;
+                }}
+                onEditEquation={handleEditExistingEquation}
                 onRemoveCell={handleRemoveCell}
-                canRemove={cells.length > 1}
+                canRemove={cells.filter((c) => c.type === 'text').length > 1}
                 mentionableUsers={mentionableUsers}
               />
             ) : (
@@ -1078,7 +1438,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
                       <div className="flex items-center space-x-2 font-sans">
                         <button
                           type="button"
-                          onClick={() => toggleStdin(cell.id)}
+                          onClick={() => handleToggleStdin(cell.id)}
                           className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors flex items-center space-x-1 ${
                             cellExecutions[cell.id]?.showStdin
                               ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
@@ -1091,7 +1451,7 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => closeOutput(cell.id)}
+                          onClick={() => handleHideOutput(cell.id)}
                           className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
                           title="Hide Terminal Output"
                         >
@@ -1153,34 +1513,164 @@ export const WordMarkdownEditor: React.FC<WordMarkdownEditorProps> = ({
             </div>
           </React.Fragment>
         ))}
-
-        {/* Bottom Cell Add Bar */}
-        <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs">
-          <span className="text-slate-500 italic text-[11px]">
-            Add text cells and code cells to build your post structure.
-          </span>
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => handleAddTextCell(cells.length - 1)}
-              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors"
-            >
-              <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
-              <FontAwesomeIcon icon={faFont} className="text-xs text-brand-400" />
-              <span>Add Text Cell</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleAddCodeCell()}
-              className="px-4 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center space-x-1.5 transition-transform active:scale-95"
-            >
-              <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
-              <FontAwesomeIcon icon={faFileCode} className="text-xs" />
-              <span>Add Code Cell</span>
-            </button>
-          </div>
-        </div>
       </div>
+
+      {/* LaTeX Equation Builder Modal */}
+      {isEquationModalOpen && mounted && createPortal(
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto my-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <span className="font-serif italic text-emerald-400 font-bold text-base">f(x)</span>
+                <h3 className="text-sm font-bold text-white">
+                  {editingEquationPillRef.current ? 'Edit Mathematical Equation' : 'Insert LaTeX Math Equation'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  editingEquationPillRef.current = null;
+                  setIsEquationModalOpen(false);
+                }}
+                className="p-1 text-slate-400 hover:text-white rounded"
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+
+            {/* Mode Selection */}
+            <div className="flex items-center space-x-4 text-xs text-slate-300">
+              <label className="flex items-center space-x-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="eqMode"
+                  checked={equationMode === 'inline'}
+                  onChange={() => setEquationMode('inline')}
+                  className="text-emerald-500"
+                />
+                <span>Inline Equation (<code className="text-emerald-400 font-mono">$...$</code>)</span>
+              </label>
+              <label className="flex items-center space-x-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="eqMode"
+                  checked={equationMode === 'block'}
+                  onChange={() => setEquationMode('block')}
+                  className="text-emerald-500"
+                />
+                <span>Block Equation (<code className="text-emerald-400 font-mono">$$...$$</code>)</span>
+              </label>
+            </div>
+
+            {/* LaTeX Input */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                LaTeX Formula:
+              </label>
+              <textarea
+                rows={3}
+                value={equationInput}
+                onChange={(e) => setEquationInput(e.target.value)}
+                placeholder="e.g. O(N \log N) or \sum_{i=1}^{n} x_i"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl p-3 text-xs font-mono text-white outline-none"
+              />
+            </div>
+
+            {/* Quick Math Symbols */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                Quick Symbols & Patterns:
+              </label>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                {[
+                  { label: 'r', val: 'r' },
+                  { label: 'p = 2\\pi r', val: 'p = 2\\pi r' },
+                  { label: 'O(N log N)', val: 'O(N \\log N)' },
+                  { label: 'O(N²)', val: 'O(N^2)' },
+                  { label: 'O(1)', val: 'O(1)' },
+                  { label: 'a/b', val: '\\frac{a}{b}' },
+                  { label: '√x', val: '\\sqrt{x}' },
+                  { label: '∑', val: '\\sum_{i=1}^{n} ' },
+                  { label: '∏', val: '\\prod_{i=1}^{n} ' },
+                  { label: '∫', val: '\\int_{a}^{b} ' },
+                  { label: '≤', val: '\\le ' },
+                  { label: '≥', val: '\\ge ' },
+                  { label: '≠', val: '\\ne ' },
+                  { label: '≈', val: '\\approx ' },
+                  { label: '±', val: '\\pm ' },
+                  { label: '∞', val: '\\infty ' },
+                  { label: '∈', val: '\\in ' },
+                  { label: '⊂', val: '\\subset ' },
+                  { label: '∪', val: '\\cup ' },
+                  { label: '∩', val: '\\cap ' },
+                  { label: 'α', val: '\\alpha ' },
+                  { label: 'β', val: '\\beta ' },
+                  { label: 'θ', val: '\\theta ' },
+                  { label: 'π', val: '\\pi ' },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => setEquationInput((prev) => prev + item.val)}
+                    className="px-2 py-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] font-mono text-slate-300 hover:text-white rounded-lg transition-colors"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Preview */}
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 min-h-[60px] flex flex-col justify-center items-center">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">
+                Live Rendered Equation
+              </span>
+              <div
+                className="text-white text-sm"
+                dangerouslySetInnerHTML={{
+                  __html: renderLatex(equationInput || 'f(x) = O(N \\log N)', equationMode === 'block'),
+                }}
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center justify-between space-x-2 pt-2 border-t border-slate-800">
+              <div>
+                {editingEquationPillRef.current && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteExistingEquation}
+                    className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold"
+                  >
+                    <FontAwesomeIcon icon={faTrash} className="mr-1" />
+                    Delete Formula
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    editingEquationPillRef.current = null;
+                    setIsEquationModalOpen(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleInsertEquationSubmit}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/30 flex items-center space-x-1.5"
+                >
+                  <span>{editingEquationPillRef.current ? 'Update Equation' : 'Insert Equation'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

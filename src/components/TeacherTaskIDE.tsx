@@ -36,6 +36,7 @@ import {
   TestSuiteSummary,
   runAllTestCases,
 } from '@/utils/testCaseRunner';
+import { parseTaskWorkbenchMetadata, DEFAULT_CHECKER_CONFIG } from '@/utils/testCaseChecker';
 import TestCaseRunnerPanel from '@/components/TestCaseRunnerPanel';
 import type { Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
@@ -59,6 +60,8 @@ interface TeacherTaskIDEProps {
 }
 
 export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
+  const checkerConfig = parseTaskWorkbenchMetadata(task?.description).checkerConfig || DEFAULT_CHECKER_CONFIG;
+
   const [ideSettings, setIdeSettings] = useState<IDESettings>(DEFAULT_SETTINGS);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isJavaPackageModalOpen, setIsJavaPackageModalOpen] = useState(false);
@@ -118,7 +121,7 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
         setDraftStatus('saved');
       }
     } else {
-      const defaultFiles = getDefaultFilesForLanguage(task.language);
+      const defaultFiles = getDefaultFilesForLanguage(task.language, task.templateCode);
       setWorkspaceFiles(defaultFiles);
       setOpenTabPaths([defaultFiles[0].path]);
       setActiveFilePath(defaultFiles[0].path);
@@ -194,7 +197,7 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
       return;
     }
     clearCodeDraft(task.id);
-    const defaultFiles = getDefaultFilesForLanguage(task.language);
+    const defaultFiles = getDefaultFilesForLanguage(task.language, task.templateCode);
     setWorkspaceFiles(defaultFiles);
     setOpenTabPaths([defaultFiles[0].path]);
     setActiveFilePath(defaultFiles[0].path);
@@ -203,8 +206,20 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
     setLastSavedTime(null);
   };
 
-  const getDefaultFilesForLanguage = (lang: string): WorkspaceFile[] => {
+  const getDefaultFilesForLanguage = (lang: string, templateCode?: string | null): WorkspaceFile[] => {
     lang = lang.toLowerCase();
+    if (templateCode && templateCode.trim()) {
+      if (lang === 'java') {
+        return [{ id: '1', path: 'Solution.java', content: templateCode }];
+      }
+      if (lang === 'python') {
+        return [{ id: '1', path: 'solution.py', content: templateCode }];
+      }
+      if (lang === 'c') {
+        return [{ id: '1', path: 'solution.c', content: templateCode }];
+      }
+      return [{ id: '1', path: 'solution.cpp', content: templateCode }];
+    }
     if (lang === 'java') {
       return [{ id: '1', path: 'Solution.java', content: `public class Solution {\n    public static void main(String[] args) {\n        System.out.println("Hello, EduCode!");\n    }\n}` }];
     }
@@ -274,6 +289,10 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
   };
 
   const handleCreateFile = (pathName: string, content = '') => {
+    if (!task.allowMultiFile && workspaceFiles.filter((f) => !f.isFolder).length >= 1) {
+      alert('Multi-file project is disabled for this task. You can only work in a single file.');
+      return;
+    }
     if (workspaceFiles.some((f) => f.path === pathName)) return;
     const newFile: WorkspaceFile = { id: Math.random().toString(), path: pathName, content };
     setWorkspaceFiles([...workspaceFiles, newFile]);
@@ -285,6 +304,10 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
   };
 
   const handleCreateFolder = (folderPath: string) => {
+    if (!task.allowMultiFile) {
+      alert('Multi-file project is disabled for this task.');
+      return;
+    }
     if (workspaceFiles.some((f) => f.path === folderPath)) return;
     const newFolder: WorkspaceFile = { id: Math.random().toString(), path: folderPath, content: '', isFolder: true };
     setWorkspaceFiles([...workspaceFiles, newFolder]);
@@ -366,7 +389,9 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
               logs: progress.logs,
             };
           });
-        }
+        },
+        10000,
+        checkerConfig
       );
       setTestSummary(summary);
     } catch (err) {
@@ -685,6 +710,7 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
               files={workspaceFiles}
               activeFilePath={activeFilePath}
               language={task.language.toLowerCase() as any}
+              allowMultiFile={Boolean(task.allowMultiFile)}
               onSelectFile={handleSelectFile}
               onCreateFile={handleCreateFile}
               onCreateFolder={handleCreateFolder}
@@ -900,6 +926,7 @@ export default function TeacherTaskIDE({ task }: TeacherTaskIDEProps) {
                       isRunning={isTesting}
                       onRunAll={handleRunAllTests}
                       onAddCustomTestCase={handleAddCustomTestCase}
+                      checkerConfig={checkerConfig}
                     />
                   ) : (
                     <XtermTerminal />
