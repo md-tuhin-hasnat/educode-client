@@ -348,6 +348,19 @@ export default function DeveloperDocsPage() {
                   Exported components: `EditorToolbar`, `RichTextCell`, `CodeCellCard`, `LatexEquationModal`, `editorUtils.ts`.
                 </div>
               </div>
+
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center space-x-2 text-rose-400 font-bold text-sm">
+                  <FontAwesomeIcon icon={faShieldHalved} />
+                  <span>4. Academic Integrity & Proctoring Submodule (`components/integrity-proctoring/`)</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Real-time exam and assessment integrity monitoring engine. Detects window blur/focus loss, tab switching, rapid clipboard paste bursts, and fullscreen exits, buffering telemetry and calculating dynamic student session risk scores.
+                </p>
+                <div className="text-[11px] text-slate-500 font-mono">
+                  Exported components: `useIntegrityMonitor`, `ProctoringShieldIndicator`, `ProctoringWarningModal`, `ProctoringTelemetryTimeline`, `types.ts`.
+                </div>
+              </div>
             </div>
           </section>
 
