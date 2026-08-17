@@ -16,6 +16,8 @@ export interface StreamPostItem {
   language?: string;
   isRunnable?: boolean;
   attachmentUrl?: string;
+  taskId?: string | null;
+  task?: CourseTaskItem | null;
   createdAt: string;
   author: { id: string; fullName: string; role: string; profilePicUrl?: string };
   materials?: StreamPostAttachment[];

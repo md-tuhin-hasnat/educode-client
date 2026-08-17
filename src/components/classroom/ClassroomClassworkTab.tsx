@@ -188,7 +188,7 @@ export function ClassroomClassworkTab({
                                   onClick={() =>
                                     router.push(
                                       userRole === 'STUDENT'
-                                        ? `/student/exam?taskId=${t.id}`
+                                        ? `/student/exam/${t.id}`
                                         : `/teacher/tasks/${t.id}`
                                     )
                                   }
@@ -301,7 +301,7 @@ export function ClassroomClassworkTab({
                                   onClick={() =>
                                     router.push(
                                       userRole === 'STUDENT'
-                                        ? `/student/exam?taskId=${t.id}`
+                                        ? `/student/exam/${t.id}`
                                         : `/teacher/tasks/${t.id}`
                                     )
                                   }
@@ -441,7 +441,7 @@ export function ClassroomClassworkTab({
                                   onClick={() =>
                                     router.push(
                                       userRole === 'STUDENT'
-                                        ? `/student/exam?taskId=${t.id}`
+                                        ? `/student/exam/${t.id}`
                                         : `/teacher/tasks/${t.id}`
                                     )
                                   }

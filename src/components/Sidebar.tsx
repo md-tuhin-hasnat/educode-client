@@ -55,7 +55,8 @@ export const Sidebar: React.FC = () => {
   } else {
     // STUDENT
     navItems = [
-      { label: 'My Classrooms', href: '/student/dashboard', icon: faGraduationCap },
+      { label: 'Overview', href: '/student/dashboard', icon: faChartPie },
+      { label: 'My Classrooms', href: '/student/classrooms', icon: faGraduationCap },
       { label: 'Notifications', href: '/student/notifications', icon: faBell },
       { label: 'Active Tasks & Exams', href: '/student/dashboard#tasks', icon: faCode },
       { label: 'Settings', href: '/student/settings', icon: faSliders },

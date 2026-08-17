@@ -29,7 +29,15 @@ import {
   faRotateRight,
   faWindowMaximize,
   faWindowRestore,
+  faCheckCircle,
+  faSpinner,
+  faBookOpen,
+  faArrowLeft,
+  faCircleCheck,
 } from '@fortawesome/free-solid-svg-icons';
+import Link from 'next/link';
+import api from '@/config/api';
+import { useAuthStore } from '@/store/useAuthStore';
 import IDESettingsModal, { DEFAULT_SETTINGS, IDESettings } from '@/components/IDESettingsModal';
 import FileExplorer, { WorkspaceFile } from '@/components/FileExplorer';
 import JavaPackageModal from '@/components/JavaPackageModal';
@@ -68,6 +76,17 @@ interface ConsoleLogEntry {
 }
 
 export default function StudentExamPage({ params }: { params: { taskId: string } }) {
+  const { user } = useAuthStore();
+  const [taskData, setTaskData] = useState<any>(null);
+  const [isLoadingTask, setIsLoadingTask] = useState<boolean>(true);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submissionFeedback, setSubmissionFeedback] = useState<{
+    status: string;
+    points?: number;
+    maxPoints?: number;
+    message?: string;
+  } | null>(null);
+
   const [language, setLanguage] = useState<'cpp' | 'python' | 'java' | 'c'>('cpp');
   const [code, setCode] = useState<string>('');
   const [customInput, setCustomInput] = useState<string>('5\n1 2 3 4 5');
@@ -77,12 +96,7 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLogEntry[]>([]);
 
   // Test Case Evaluation States
-  const [testCases, setTestCases] = useState<TestCaseInput[]>([
-    { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false, testType: 'SAMPLE' },
-    { id: '2', order: 2, inputData: '4\n10 20 30 40', expectedOutput: '40 30 20 10', points: 25, isHidden: false, testType: 'SAMPLE' },
-    { id: '3', order: 3, inputData: '1\n42', expectedOutput: '42', points: 25, isHidden: true, testType: 'PRETEST' },
-    { id: '4', order: 4, inputData: '6\n1 9 2 8 3 7', expectedOutput: '7 3 8 2 9 1', points: 25, isHidden: true, testType: 'PRETEST' },
-  ]);
+  const [testCases, setTestCases] = useState<TestCaseInput[]>([]);
   const [testSummary, setTestSummary] = useState<TestSuiteSummary | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
@@ -200,13 +214,13 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
   const [timeLeftSeconds, setTimeLeftSeconds] = useState<number>(7200);
 
   // Default Files Boilerplate Generator
-  const getDefaultFilesForLanguage = useCallback((lang: string): WorkspaceFile[] => {
+  const getDefaultFilesForLanguage = useCallback((lang: string, templateCode?: string): WorkspaceFile[] => {
     if (lang === 'java') {
       return [
         {
           id: '1',
           path: 'Solution.java',
-          content: `import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        if (scanner.hasNextInt()) {\n            int n = scanner.nextInt();\n            int[] arr = new int[n];\n            for (int i = 0; i < n; i++) arr[i] = scanner.nextInt();\n            for (int i = n - 1; i >= 0; i--) System.out.print(arr[i] + (i == 0 ? "" : " "));\n            System.out.println();\n        } else {\n            System.out.println("EduCode Exam Platform");\n        }\n    }\n}`,
+          content: templateCode || `import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}`,
         },
       ];
     }
@@ -215,7 +229,7 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
         {
           id: '1',
           path: 'solution.py',
-          content: `import sys\n\ndef solve():\n    lines = sys.stdin.read().split()\n    if not lines:\n        print("EduCode Exam Platform")\n        return\n    n = int(lines[0])\n    arr = lines[1:n+1]\n    print(" ".join(reversed(arr)))\n\nif __name__ == "__main__":\n    solve()\n`,
+          content: templateCode || `import sys\n\ndef solve():\n    # Write your solution here\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
         },
       ];
     }
@@ -224,7 +238,7 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
         {
           id: '1',
           path: 'solution.c',
-          content: `#include <stdio.h>\n\nint main() {\n    int n;\n    if (scanf("%d", &n) == 1) {\n        int arr[100];\n        for(int i=0; i<n; i++) scanf("%d", &arr[i]);\n        for(int i=n-1; i>=0; i--) printf("%d%s", arr[i], i==0 ? "" : " ");\n        printf("\\n");\n    } else {\n        printf("EduCode Exam Platform\\n");\n    }\n    return 0;\n}`,
+          content: templateCode || `#include <stdio.h>\n\nint main() {\n    // Write your solution here\n    return 0;\n}`,
         },
       ];
     }
@@ -232,45 +246,102 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
       {
         id: '1',
         path: 'solution.cpp',
-        content: `#include <iostream>\nusing namespace std;\n\nint main() {\n    int n;\n    if (cin >> n) {\n        int arr[100];\n        for(int i=0; i<n; i++) cin >> arr[i];\n        for(int i=n-1; i>=0; i--) cout << arr[i] << (i==0 ? "" : " ");\n        cout << endl;\n    } else {\n        cout << "EduCode Exam Platform" << endl;\n    }\n    return 0;\n}`,
+        content: templateCode || `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    return 0;\n}`,
       },
     ];
   }, []);
 
-  // Initialize workspace from saved draft or defaults on mount
+  // Fetch real task from backend on mount
   useEffect(() => {
-    const savedDraft = loadCodeDraft(params.taskId);
-    if (savedDraft && Array.isArray(savedDraft.files) && savedDraft.files.length > 0) {
-      if (savedDraft.language && ['cpp', 'python', 'java', 'c'].includes(savedDraft.language)) {
-        setLanguage(savedDraft.language as 'cpp' | 'python' | 'java' | 'c');
+    async function loadTaskAndWorkspace() {
+      try {
+        setIsLoadingTask(true);
+        const res = await api.get(`/tasks/${params.taskId}`);
+        const data = res.data;
+        if (data) {
+          setTaskData(data);
+          let chosenLang = language;
+          if (data.language && ['cpp', 'python', 'java', 'c'].includes(data.language.toLowerCase())) {
+            chosenLang = data.language.toLowerCase() as any;
+            setLanguage(chosenLang);
+          }
+          if (Array.isArray(data.testCases) && data.testCases.length > 0) {
+            setTestCases(
+              data.testCases.map((tc: any, idx: number) => ({
+                id: tc.id || String(idx + 1),
+                order: tc.order || idx + 1,
+                inputData: tc.inputData || '',
+                expectedOutput: tc.expectedOutput || '',
+                points: tc.points || 25,
+                isHidden: tc.isHidden ?? false,
+                testType: tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE'),
+              }))
+            );
+            const sample = data.testCases.find((tc: any) => !tc.isHidden && tc.inputData);
+            if (sample) setCustomInput(sample.inputData);
+          }
+          if (data.examDurationMin) {
+            setTimeLeftSeconds(data.examDurationMin * 60);
+          }
+
+          // Workspace init with draft or task template
+          const savedDraft = loadCodeDraft(params.taskId);
+          if (savedDraft && Array.isArray(savedDraft.files) && savedDraft.files.length > 0) {
+            if (savedDraft.language && ['cpp', 'python', 'java', 'c'].includes(savedDraft.language)) {
+              setLanguage(savedDraft.language as 'cpp' | 'python' | 'java' | 'c');
+            }
+            setWorkspaceFiles(savedDraft.files);
+            const tabs = savedDraft.openTabPaths?.length ? savedDraft.openTabPaths : [savedDraft.files[0].path];
+            setOpenTabPaths(tabs);
+            const active = savedDraft.activeFilePath || tabs[0];
+            setActiveFilePath(active);
+            const activeFile = savedDraft.files.find((f) => f.path === active);
+            setCode(activeFile ? activeFile.content : savedDraft.code || savedDraft.files[0].content);
+            if (savedDraft.updatedAt) {
+              setLastSavedTime(new Date(savedDraft.updatedAt).toLocaleTimeString());
+              setDraftStatus('saved');
+            }
+          } else {
+            const initialFiles = getDefaultFilesForLanguage(chosenLang, data.templateCode);
+            setWorkspaceFiles(initialFiles);
+            const mainFile = initialFiles[0];
+            setOpenTabPaths([mainFile.path]);
+            setActiveFilePath(mainFile.path);
+            setCode(mainFile.content);
+            setDraftStatus('idle');
+            setLastSavedTime(null);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load task details:', err);
+        // Fallback workspace if offline/mock
+        const savedDraft = loadCodeDraft(params.taskId);
+        if (savedDraft && Array.isArray(savedDraft.files) && savedDraft.files.length > 0) {
+          setWorkspaceFiles(savedDraft.files);
+          setOpenTabPaths(savedDraft.openTabPaths || [savedDraft.files[0].path]);
+          setActiveFilePath(savedDraft.activeFilePath || savedDraft.files[0].path);
+          setCode(savedDraft.code || savedDraft.files[0].content);
+        } else {
+          const fallback = getDefaultFilesForLanguage(language);
+          setWorkspaceFiles(fallback);
+          setOpenTabPaths([fallback[0].path]);
+          setActiveFilePath(fallback[0].path);
+          setCode(fallback[0].content);
+        }
+      } finally {
+        setIsLoadingTask(false);
       }
-      setWorkspaceFiles(savedDraft.files);
-      const tabs = savedDraft.openTabPaths?.length ? savedDraft.openTabPaths : [savedDraft.files[0].path];
-      setOpenTabPaths(tabs);
-      const active = savedDraft.activeFilePath || tabs[0];
-      setActiveFilePath(active);
-      const activeFile = savedDraft.files.find((f) => f.path === active);
-      setCode(activeFile ? activeFile.content : savedDraft.code || savedDraft.files[0].content);
-      if (savedDraft.updatedAt) {
-        setLastSavedTime(new Date(savedDraft.updatedAt).toLocaleTimeString());
-        setDraftStatus('saved');
-      }
-    } else {
-      const initialFiles = getDefaultFilesForLanguage(language);
-      setWorkspaceFiles(initialFiles);
-      const mainFile = initialFiles[0];
-      setOpenTabPaths([mainFile.path]);
-      setActiveFilePath(mainFile.path);
-      setCode(mainFile.content);
-      setDraftStatus('idle');
-      setLastSavedTime(null);
+    }
+
+    if (params.taskId) {
+      loadTaskAndWorkspace();
     }
   }, [params.taskId, getDefaultFilesForLanguage]);
 
   // When language is manually changed
   const handleLanguageChange = (newLang: 'cpp' | 'python' | 'java' | 'c') => {
     setLanguage(newLang);
-    const newFiles = getDefaultFilesForLanguage(newLang);
+    const newFiles = getDefaultFilesForLanguage(newLang, taskData?.templateCode);
     setWorkspaceFiles(newFiles);
     const mainFile = newFiles[0];
     setOpenTabPaths([mainFile.path]);
@@ -733,140 +804,212 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
   };
 
   const handleSubmitExam = async () => {
-    if (window.educode?.offline) {
-      await window.educode.offline.saveSubmission({
+    try {
+      setIsSubmitting(true);
+      const res = await api.post('/submissions', {
         taskId: params.taskId,
-        studentId: 'current-student-id',
-        code,
-        codeSnapshot: code,
-        language,
-        timestamp: Date.now(),
+        sourceCode: code,
+        language: language.toUpperCase(),
       });
+
+      if (window.educode?.offline) {
+        await window.educode.offline.saveSubmission({
+          taskId: params.taskId,
+          studentId: user?.id || 'current-student-id',
+          code,
+          codeSnapshot: code,
+          language,
+          timestamp: Date.now(),
+        });
+      }
+
+      setSubmissionFeedback({
+        status: res.data?.status || 'SUBMITTED',
+        points: res.data?.pointsEarned ?? res.data?.score,
+        maxPoints: taskData?.maxPoints || 100,
+        message: 'Solution successfully evaluated and submitted to classroom records.',
+      });
+    } catch (err: any) {
+      console.error('Submission error:', err);
+      const errMsg = err.response?.data?.message || 'Submission completed and cached for offline synchronization.';
+      if (window.educode?.offline) {
+        await window.educode.offline.saveSubmission({
+          taskId: params.taskId,
+          studentId: user?.id || 'current-student-id',
+          code,
+          codeSnapshot: code,
+          language,
+          timestamp: Date.now(),
+        });
+      }
+      setSubmissionFeedback({
+        status: 'OFFLINE_SAVED',
+        maxPoints: taskData?.maxPoints || 100,
+        message: errMsg,
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    alert('Exam submission successfully saved locally and queued for server sync!');
   };
 
   return (
     <div className="flex flex-col h-screen bg-[#0f172a] text-slate-100 select-none overflow-hidden font-sans">
-      {/* Top Exam Navigation Bar */}
-      <div className="h-14 bg-[#111827] border-b border-slate-800 px-4 flex items-center justify-between shrink-0 z-20">
-        <div className="flex items-center space-x-3">
-          <span className="font-bold text-white tracking-wide text-sm flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></span>
-            <span>Task #{params.taskId} Examination</span>
-          </span>
-          <span className="text-xs text-slate-500 font-mono">|</span>
-          <span className="text-xs font-semibold text-slate-400">Offline Secure Workspace</span>
+      {/* Top Space-Optimized Exam Navigation Bar */}
+      <div className="h-12 bg-[#0b0f19] border-b border-slate-800/80 px-3 flex items-center justify-between shrink-0 z-20 gap-3">
+        {/* Left: Exit/Classroom Link + Task Info */}
+        <div className="flex items-center space-x-2.5 min-w-0 flex-shrink">
+          <Link
+            href={`/student/classrooms/${taskData?.courseId || ''}`}
+            title="Return to Classroom"
+            className="w-7 h-7 rounded-lg bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700/50 text-slate-400 hover:text-white flex items-center justify-center transition-colors shrink-0"
+          >
+            <FontAwesomeIcon icon={faArrowLeft} className="text-xs" />
+          </Link>
+
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse shrink-0"></span>
+            <span
+              className="font-bold text-white tracking-tight text-xs truncate max-w-[150px] sm:max-w-[220px] md:max-w-[300px] lg:max-w-[380px]"
+              title={taskData?.title || `Task #${params.taskId}`}
+            >
+              {taskData?.title || `Task #${params.taskId}`}
+            </span>
+          </div>
+
+          {taskData?.course?.subjectCode && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-teal-400 border border-slate-700/60 truncate max-w-[90px] hidden md:inline-block shrink-0">
+              {taskData.course.subjectCode}
+            </span>
+          )}
+
+          {taskData?.taskType && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-brand-500/15 text-brand-400 border border-brand-500/30 uppercase tracking-wider shrink-0 hidden sm:inline-block">
+              {taskData.taskType}
+            </span>
+          )}
         </div>
 
-        {/* Status Indicators & Action Bar */}
-        <div className="flex items-center space-x-3 text-xs">
+        {/* Center / Status Indicators */}
+        <div className="flex items-center space-x-2 shrink-0">
           <div
-            className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center space-x-1.5 border transition-all ${
+            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center space-x-1 border transition-all ${
               isMonitoringActive
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-slate-800 border-slate-700 text-slate-400'
+                : 'bg-slate-800/80 border-slate-700 text-slate-400'
             }`}
           >
-            <FontAwesomeIcon icon={faShieldHalved} className={isMonitoringActive ? 'animate-pulse' : ''} />
-            <span>{isMonitoringActive ? 'Proctoring Active' : 'Standby'}</span>
+            <FontAwesomeIcon icon={faShieldHalved} className={`text-[10px] ${isMonitoringActive ? 'animate-pulse' : ''}`} />
+            <span className="hidden xl:inline">{isMonitoringActive ? 'Proctoring' : 'Standby'}</span>
           </div>
 
           {focusWarnings > 0 && (
-            <div className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[11px] font-semibold flex items-center space-x-1 animate-pulse">
-              <FontAwesomeIcon icon={faExclamationTriangle} />
-              <span>Warnings: {focusWarnings}</span>
+            <div className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold flex items-center space-x-1 animate-pulse">
+              <FontAwesomeIcon icon={faExclamationTriangle} className="text-[10px]" />
+              <span>{focusWarnings}</span>
             </div>
           )}
 
-          <div className="px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-tealAccent-400 text-xs font-mono font-bold flex items-center space-x-1.5">
-            <FontAwesomeIcon icon={faClock} />
+          <div className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700/80 text-tealAccent-400 text-xs font-mono font-bold flex items-center space-x-1.5 shadow-inner">
+            <FontAwesomeIcon icon={faClock} className="text-[10px]" />
             <span>{formatTime(timeLeftSeconds)}</span>
           </div>
 
-          {/* Full Focus Toggle Button */}
-          <button
-            onClick={() => setIsFullFocus(!isFullFocus)}
-            title={isFullFocus ? 'Exit Focus Mode' : 'Enter Full Focus Mode'}
-            className={`p-1.5 w-8 h-8 rounded-lg border text-xs font-semibold flex items-center justify-center transition-all ${
-              isFullFocus
-                ? 'bg-brand-500/20 border-brand-500 text-brand-400'
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
-            }`}
-          >
-            <FontAwesomeIcon icon={isFullFocus ? faCompress : faExpand} />
-          </button>
+          {/* Draft Saved Indicator */}
+          {lastSavedTime && (
+            <div
+              className="hidden 2xl:flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-900/60 border border-slate-800 text-[10px] text-slate-400"
+              title={`Draft auto-saved at ${lastSavedTime}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${draftStatus === 'saving' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+              <span>{draftStatus === 'saving' ? 'Saving' : 'Saved'}</span>
+            </div>
+          )}
+        </div>
 
-          {/* IDE Settings Modal Trigger */}
+        {/* Right: Tools & Action Buttons */}
+        <div className="flex items-center space-x-1.5 shrink-0 text-xs">
+          {/* Save Draft Icon Button */}
           <button
-            onClick={() => setIsSettingsOpen(true)}
-            title="IDE Settings"
-            className="p-1.5 w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center transition-all"
+            onClick={handleManualSaveDraft}
+            title="Save code draft locally (Ctrl+S)"
+            className="w-7 h-7 rounded-md bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center justify-center transition-colors"
           >
-            <FontAwesomeIcon icon={faGear} />
+            <FontAwesomeIcon icon={faFloppyDisk} className="text-[11px] text-emerald-400" />
           </button>
 
           {/* Terminal Toggle Button */}
           <button
             onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all border ${
+            className={`px-2 py-1 h-7 rounded-md text-xs font-medium flex items-center space-x-1 border transition-all ${
               isTerminalOpen
-                ? 'bg-slate-800 text-white border-slate-700 shadow-sm'
-                : 'bg-slate-900/80 text-slate-400 hover:text-white border-slate-800'
+                ? 'bg-slate-800 text-white border-slate-600 shadow-sm'
+                : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
             }`}
             title="Toggle Integrated Terminal"
           >
-            <FontAwesomeIcon icon={faTerminal} className={isTerminalOpen ? 'text-emerald-400' : 'text-slate-400'} />
-            <span>Terminal</span>
+            <FontAwesomeIcon icon={faTerminal} className="text-[10px] text-emerald-400" />
+            <span className="hidden lg:inline text-[11px]">Terminal</span>
           </button>
 
-          {/* Save Draft Button */}
+          {/* Focus Mode Button */}
           <button
-            onClick={handleManualSaveDraft}
-            title="Save code draft locally so you can resume later"
-            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all border border-slate-700"
+            onClick={() => setIsFullFocus(!isFullFocus)}
+            title={isFullFocus ? 'Exit Focus Mode' : 'Enter Full Focus Mode'}
+            className={`w-7 h-7 rounded-md border text-xs flex items-center justify-center transition-all ${
+              isFullFocus
+                ? 'bg-brand-500/20 border-brand-500 text-brand-400'
+                : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+            }`}
           >
-            <FontAwesomeIcon icon={faFloppyDisk} className="text-[11px] text-emerald-400" />
-            <span>Save Draft</span>
+            <FontAwesomeIcon icon={isFullFocus ? faCompress : faExpand} className="text-[10px]" />
           </button>
 
-          {/* Live Draft Indicator */}
-          {lastSavedTime && (
-            <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300">
-              <span className={`w-2 h-2 rounded-full ${draftStatus === 'saving' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
-              <span>{draftStatus === 'saving' ? 'Saving...' : `Draft saved (${lastSavedTime})`}</span>
-            </div>
-          )}
+          {/* IDE Settings Button */}
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            title="IDE Settings"
+            className="w-7 h-7 rounded-md bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center justify-center transition-colors"
+          >
+            <FontAwesomeIcon icon={faGear} className="text-[10px]" />
+          </button>
 
-          {/* Run All Test Cases Button */}
+          <div className="w-[1px] h-4 bg-slate-800 mx-0.5 hidden sm:block"></div>
+
+          {/* Run Tests Button */}
           <button
             onClick={handleRunAllTests}
             disabled={isTesting || testCases.length === 0}
-            className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-brand-600/30 flex items-center space-x-1.5 transition-all disabled:opacity-50"
+            className="px-2.5 py-1 h-7 rounded-md bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold shadow-sm flex items-center space-x-1 transition-all disabled:opacity-50"
             title="Run all evaluation test cases against your solution"
           >
             <FontAwesomeIcon
               icon={isTesting ? faRotateRight : faFlask}
               className={`text-[10px] ${isTesting ? 'animate-spin' : ''}`}
             />
-            <span>{isTesting ? 'Testing...' : `Run Tests (${testCases.length})`}</span>
+            <span className="hidden sm:inline">Tests</span>
+            <span className="font-mono text-[11px]">({testCases.length})</span>
           </button>
 
+          {/* Run Code Button */}
           <button
             onClick={handleRunCode}
             disabled={isExecuting}
-            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/30 flex items-center space-x-1.5 transition-all disabled:opacity-50"
+            className="px-2.5 py-1 h-7 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm flex items-center space-x-1 transition-all disabled:opacity-50"
+            title="Compile & Run with Custom Input"
           >
-            <FontAwesomeIcon icon={faPlay} className="text-[10px]" />
-            <span>Run Code</span>
+            <FontAwesomeIcon icon={faPlay} className="text-[9px]" />
+            <span>Run</span>
           </button>
 
+          {/* Submit Solution Button */}
           <button
             onClick={handleSubmitExam}
-            className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white text-xs font-semibold shadow-md shadow-brand-600/30 flex items-center space-x-1.5 transition-all"
+            disabled={isSubmitting}
+            className="px-3 py-1 h-7 rounded-md bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-brand-600/25 flex items-center space-x-1.5 transition-all disabled:opacity-50"
+            title="Submit solution for grading"
           >
-            <FontAwesomeIcon icon={faPaperPlane} className="text-[10px]" />
-            <span>Submit Solution</span>
+            <FontAwesomeIcon icon={isSubmitting ? faSpinner : faPaperPlane} className={`text-[10px] ${isSubmitting ? 'animate-spin' : ''}`} />
+            <span>Submit</span>
           </button>
         </div>
       </div>
@@ -887,7 +1030,7 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
                 onClick={() => setActiveTab('problem')}
                 className={`px-3.5 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
                   activeTab === 'problem'
-                    ? 'border-brand-500 text-white bg-slate-800/50'
+                    ? 'border-brand-500 text-white bg-slate-800/50 font-bold'
                     : 'border-transparent hover:text-slate-200'
                 }`}
               >
@@ -949,33 +1092,76 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
                 </div>
               ) : activeTab === 'problem' ? (
                 <div className="space-y-4">
-                  <div>
-                    <h2 className="text-base font-bold text-white mb-1">Reverse Array in Place</h2>
-                    <div className="flex items-center space-x-2 text-[11px]">
-                      <span className="text-slate-400">Time Limit: <strong className="text-slate-200 font-mono">10.0s (Hard Limit)</strong></span>
-                      <span className="text-slate-600">•</span>
-                      <span className="text-slate-400">Memory Limit: <strong className="text-slate-200 font-mono">256MB</strong></span>
+                  {isLoadingTask ? (
+                    <div className="py-12 text-center text-slate-500 text-xs">
+                      <FontAwesomeIcon icon={faSpinner} className="animate-spin text-lg mb-2" />
+                      <p>Loading problem description...</p>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="flex items-center space-x-2 mb-1.5">
+                          {taskData?.taskType && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-brand-500/20 text-brand-400 border border-brand-500/30 uppercase">
+                              {taskData.taskType}
+                            </span>
+                          )}
+                          {taskData?.course?.subjectCode && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-teal-300 border border-slate-700">
+                              {taskData.course.subjectCode}
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-base font-bold text-white mb-1.5">
+                          {taskData?.title || 'Programming Task'}
+                        </h2>
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                          <span>
+                            Time Limit: <strong className="text-slate-200 font-mono">{((taskData?.timeLimitMs || 1000) / 1000).toFixed(1)}s</strong>
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Memory Limit: <strong className="text-slate-200 font-mono">{taskData?.memoryLimitMb || 256}MB</strong>
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Max Points: <strong className="text-amber-400 font-mono">{taskData?.maxPoints || 100} pts</strong>
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="prose prose-invert max-w-none text-slate-300 text-xs space-y-3">
-                    <p>
-                      Given an array of integers <code className="bg-slate-800 px-1 py-0.5 rounded text-brand-400">arr</code> of size <code className="bg-slate-800 px-1 py-0.5 rounded text-brand-400">N</code>, write a program to reverse the elements of the array in place without using additional array allocations.
-                    </p>
+                      <div className="prose prose-invert max-w-none text-slate-300 text-xs space-y-3 whitespace-pre-wrap leading-relaxed">
+                        {taskData?.description ? (
+                          taskData.description.replace(/<!--educode-task-meta:[\s\S]*?-->/g, '').trim()
+                        ) : (
+                          <p>Solve this programming problem in your selected language and test with sample cases before submitting.</p>
+                        )}
+                      </div>
 
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Input Format</h3>
-                    <p>The first line contains an integer &quot;N&quot;. The second line contains &quot;N&quot; space-separated integers.</p>
-
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Output Format</h3>
-                    <p>Print the reversed array elements separated by spaces on a single line.</p>
-
-                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                      <p className="font-bold text-slate-200 text-[11px]">Sample Input 1</p>
-                      <pre className="p-2 bg-slate-900 rounded font-mono text-[11px] text-tealAccent-400">5{"\n"}1 2 3 4 5</pre>
-                      <p className="font-bold text-slate-200 text-[11px]">Sample Output 1</p>
-                      <pre className="p-2 bg-slate-900 rounded font-mono text-[11px] text-tealAccent-400">5 4 3 2 1</pre>
-                    </div>
-                  </div>
+                      {/* Render Sample Test Cases if available */}
+                      {testCases.filter((tc) => !tc.isHidden).length > 0 && (
+                        <div className="space-y-3 pt-3 border-t border-slate-800">
+                          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                            Sample Test Cases
+                          </h4>
+                          {testCases
+                            .filter((tc) => !tc.isHidden)
+                            .map((tc, idx) => (
+                              <div key={tc.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                                <p className="font-bold text-slate-300 text-[11px]">Sample #{idx + 1} Input</p>
+                                <pre className="p-2 bg-slate-900 rounded font-mono text-[11px] text-teal-300 overflow-x-auto">
+                                  {tc.inputData || '(Empty input)'}
+                                </pre>
+                                <p className="font-bold text-slate-300 text-[11px]">Sample #{idx + 1} Expected Output</p>
+                                <pre className="p-2 bg-slate-900 rounded font-mono text-[11px] text-teal-300 overflow-x-auto">
+                                  {tc.expectedOutput || '(Empty output)'}
+                                </pre>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 /* Interactive Integrated Console Tab */
@@ -1414,6 +1600,54 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
             >
               Acknowledge & Return to Exam
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Submission Feedback Modal */}
+      {submissionFeedback && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel p-6 rounded-2xl border border-teal-500/40 max-w-md w-full text-center space-y-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-teal-500/20 text-teal-400 mx-auto flex items-center justify-center text-xl">
+              <FontAwesomeIcon icon={faCheckCircle} />
+            </div>
+
+            <div>
+              <h2 className="text-base font-bold text-white">Solution Submitted Successfully</h2>
+              <p className="text-xs text-slate-300 mt-1">
+                {submissionFeedback.message}
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-900 rounded-xl text-left text-xs font-mono space-y-1 border border-slate-800">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Status:</span>
+                <span className="text-emerald-400 font-bold">{submissionFeedback.status}</span>
+              </div>
+              {submissionFeedback.points !== undefined && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Points Awarded:</span>
+                  <span className="text-amber-400 font-bold">
+                    {submissionFeedback.points} / {submissionFeedback.maxPoints || 100}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-3 pt-2">
+              <button
+                onClick={() => setSubmissionFeedback(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-all border border-slate-700"
+              >
+                Continue Editing
+              </button>
+              <a
+                href={`/student/classrooms/${taskData?.courseId || ''}`}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 text-white font-semibold text-xs shadow-lg shadow-teal-600/30 text-center transition-all"
+              >
+                Return to Classroom
+              </a>
+            </div>
           </div>
         </div>
       )}

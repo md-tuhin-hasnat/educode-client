@@ -92,7 +92,8 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
   const { user } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isTeacherOrAdmin = user?.role === 'ADMIN' || user?.role === 'TEACHER';
+  const roleUpper = (user?.role || '').toUpperCase();
+  const isTeacherOrAdmin = roleUpper === 'ADMIN' || roleUpper === 'TEACHER';
 
   const fetchCourse = useCallback(async () => {
     try {
@@ -343,6 +344,7 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
       {activeTab === 'stream' && (
         <ClassroomStreamTab
           streamPosts={course.streamPosts}
+          tasks={course.tasks}
           currentUser={user}
           isTeacherOrAdmin={isTeacherOrAdmin}
           highlightPostId={highlightPostId}
@@ -413,8 +415,10 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
             ? {
                 id: editingPost.id,
                 body: editingPost.body,
+                codeSnippet: editingPost.codeSnippet,
                 language: editingPost.language,
                 isRunnable: editingPost.isRunnable,
+                taskId: editingPost.taskId || editingPost.task?.id || undefined,
                 materials: editingPost.materials,
               }
             : undefined

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import dynamic from 'next/dynamic';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -34,7 +34,9 @@ import {
   faRotateRight,
   faWindowMaximize,
   faWindowRestore,
+  faArrowLeft,
 } from '@fortawesome/free-solid-svg-icons';
+import Link from 'next/link';
 import IDESettingsModal, { DEFAULT_SETTINGS, IDESettings } from '@/components/IDESettingsModal';
 import FileExplorer, { WorkspaceFile } from '@/components/FileExplorer';
 import JavaPackageModal from '@/components/JavaPackageModal';
@@ -89,6 +91,7 @@ interface TaskWorkspaceState {
 export default function StudentSolvePage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuthStore();
   
   const [assessment, setAssessment] = useState<any>(null);
@@ -97,6 +100,14 @@ export default function StudentSolvePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-redirect if id is direct and taskId parameter is present
+  useEffect(() => {
+    const urlTaskId = searchParams?.get('taskId');
+    if ((id === 'direct' || id === 'undefined' || !id) && urlTaskId) {
+      router.replace(`/student/exam/${urlTaskId}`);
+    }
+  }, [id, searchParams, router]);
 
   // State mapped by task ID
   const [workspaces, setWorkspaces] = useState<Record<string, TaskWorkspaceState>>({});
@@ -125,6 +136,7 @@ export default function StudentSolvePage() {
   const monacoRef = useRef<Monaco | null>(null);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
+  // Default Files Boilerplate Generator
   const getDefaultFilesForLanguage = useCallback((lang: 'cpp' | 'python' | 'java' | 'c', templateCode?: string): WorkspaceFile[] => {
     if (lang === 'java') {
       return [
@@ -163,14 +175,26 @@ export default function StudentSolvePage() {
   }, []);
 
   const fetchAssessment = async () => {
+    const urlTaskId = searchParams?.get('taskId');
+    if ((id === 'direct' || id === 'undefined' || !id) && urlTaskId) {
+      router.replace(`/student/exam/${urlTaskId}`);
+      return;
+    }
+
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/assessments/${id}`, {
         headers: { 'Authorization': `Bearer ${user?.token}` }
       });
-      if (!res.ok) throw new Error('Failed to fetch assessment');
+      if (!res.ok) {
+        if (urlTaskId) {
+          router.replace(`/student/exam/${urlTaskId}`);
+          return;
+        }
+        throw new Error('Failed to fetch assessment');
+      }
       const data = await res.json();
       
-      if (data.status !== 'RUNNING') {
+      if (data.type === 'EXAM' && data.status !== 'RUNNING' && data.status !== 'FINISHED') {
         throw new Error('This exam is not currently running.');
       }
       
@@ -860,115 +884,153 @@ export default function StudentSolvePage() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-950 overflow-hidden select-none">
-      {/* Top Header Bar */}
-      <div className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 z-20">
-        <div className="flex items-center space-x-3">
-          <div className="font-bold text-white text-sm truncate max-w-md">
-            {assessment.title}
+      {/* Top Space-Optimized Header Bar */}
+      <div className="h-12 bg-[#0b0f19] border-b border-slate-800/80 px-3 flex items-center justify-between shrink-0 z-20 gap-3">
+        {/* Left: Exit/Classroom Link + Exam Info */}
+        <div className="flex items-center space-x-2.5 min-w-0 flex-shrink">
+          <Link
+            href="/student/dashboard"
+            title="Return to Dashboard"
+            className="w-7 h-7 rounded-lg bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700/50 text-slate-400 hover:text-white flex items-center justify-center transition-colors shrink-0"
+          >
+            <FontAwesomeIcon icon={faArrowLeft} className="text-xs" />
+          </Link>
+
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse shrink-0"></span>
+            <span
+              className="font-bold text-white tracking-tight text-xs truncate max-w-[150px] sm:max-w-[220px] md:max-w-[300px] lg:max-w-[380px]"
+              title={assessment.title}
+            >
+              {assessment.title}
+            </span>
           </div>
+
+          {assessment.type && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-brand-500/15 text-brand-400 border border-brand-500/30 uppercase tracking-wider shrink-0 hidden sm:inline-block">
+              {assessment.type}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        {/* Center / Status Indicators */}
+        <div className="flex items-center space-x-2 shrink-0">
           <div
-            className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center space-x-1.5 border transition-all ${
+            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center space-x-1 border transition-all ${
               isMonitoringActive
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-slate-800 border-slate-700 text-slate-400'
+                : 'bg-slate-800/80 border-slate-700 text-slate-400'
             }`}
           >
-            <FontAwesomeIcon icon={faShieldHalved} className={isMonitoringActive ? 'animate-pulse' : ''} />
-            <span>{isMonitoringActive ? 'Proctoring Active' : 'Standby'}</span>
+            <FontAwesomeIcon icon={faShieldHalved} className={`text-[10px] ${isMonitoringActive ? 'animate-pulse' : ''}`} />
+            <span className="hidden xl:inline">{isMonitoringActive ? 'Proctoring' : 'Standby'}</span>
           </div>
 
-          <div className={`px-3 py-1 rounded-full border text-xs font-mono font-bold flex items-center space-x-1.5 ${
+          <div className={`px-2.5 py-1 rounded-md border text-xs font-mono font-bold flex items-center space-x-1.5 shadow-inner ${
              timeLeft !== null && timeLeft < 300 
                ? 'bg-red-500/20 text-red-400 border-red-500/30 animate-pulse' 
-               : 'bg-slate-800 border-slate-700 text-tealAccent-400'
+               : 'bg-slate-900 border-slate-700/80 text-tealAccent-400'
           }`}>
-            <FontAwesomeIcon icon={faClock} />
+            <FontAwesomeIcon icon={faClock} className="text-[10px]" />
             <span>{timeLeft !== null ? formatTime(timeLeft) : 'Unlimited'}</span>
           </div>
 
+          {/* Draft Saved Indicator */}
+          {lastSavedTime && (
+            <div
+              className="hidden 2xl:flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-900/60 border border-slate-800 text-[10px] text-slate-400"
+              title={`Draft auto-saved at ${lastSavedTime}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${draftStatus === 'saving' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+              <span>{draftStatus === 'saving' ? 'Saving' : 'Saved'}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Tools & Action Buttons */}
+        <div className="flex items-center space-x-1.5 shrink-0 text-xs">
+          {/* Save Draft Icon Button */}
+          <button
+            onClick={handleManualSaveDraft}
+            title="Save code draft locally (Ctrl+S)"
+            className="w-7 h-7 rounded-md bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center justify-center transition-colors"
+          >
+            <FontAwesomeIcon icon={faFloppyDisk} className="text-[11px] text-emerald-400" />
+          </button>
+
+          {/* Terminal Toggle Button */}
+          <button
+            onClick={() => setIsTerminalOpen(!isTerminalOpen)}
+            className={`px-2 py-1 h-7 rounded-md text-xs font-medium flex items-center space-x-1 border transition-all ${
+              isTerminalOpen
+                ? 'bg-slate-800 text-white border-slate-600 shadow-sm'
+                : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
+            }`}
+            title="Toggle Integrated Terminal"
+          >
+            <FontAwesomeIcon icon={faTerminal} className="text-[10px] text-emerald-400" />
+            <span className="hidden lg:inline text-[11px]">Terminal</span>
+          </button>
+
+          {/* Focus Mode Button */}
           <button
             onClick={() => setIsFullFocus(!isFullFocus)}
             title={isFullFocus ? 'Exit Focus Mode' : 'Enter Full Focus Mode'}
-            className={`p-1.5 w-8 h-8 rounded-lg border text-xs font-semibold flex items-center justify-center transition-all shrink-0 ${
+            className={`w-7 h-7 rounded-md border text-xs flex items-center justify-center transition-all ${
               isFullFocus
                 ? 'bg-brand-500/20 border-brand-500 text-brand-400'
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+                : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
             }`}
           >
-            <FontAwesomeIcon icon={isFullFocus ? faCompress : faExpand} />
+            <FontAwesomeIcon icon={isFullFocus ? faCompress : faExpand} className="text-[10px]" />
           </button>
 
+          {/* IDE Settings Button */}
           <button
             onClick={() => setIsSettingsOpen(true)}
             title="IDE Settings"
-            className="p-1.5 w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center transition-all shrink-0"
+            className="w-7 h-7 rounded-md bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center justify-center transition-colors"
           >
-            <FontAwesomeIcon icon={faGear} />
+            <FontAwesomeIcon icon={faGear} className="text-[10px]" />
           </button>
 
-          <button
-            onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all border shrink-0 ${
-              isTerminalOpen
-                ? 'bg-slate-800 text-white border-slate-700 shadow-sm'
-                : 'bg-slate-900/80 text-slate-400 hover:text-white border-slate-800'
-            }`}
-          >
-            <FontAwesomeIcon icon={faTerminal} className={isTerminalOpen ? 'text-emerald-400' : 'text-slate-400'} />
-            <span>Terminal</span>
-          </button>
+          <div className="w-[1px] h-4 bg-slate-800 mx-0.5 hidden sm:block"></div>
 
-          {/* Save Draft Button */}
-          <button
-            onClick={handleManualSaveDraft}
-            title="Save code draft locally so you can resume later"
-            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all border border-slate-700 shrink-0"
-          >
-            <FontAwesomeIcon icon={faFloppyDisk} className="text-[11px] text-emerald-400" />
-            <span>Save Draft</span>
-          </button>
-
-          {/* Live Draft Indicator */}
-          {lastSavedTime && (
-            <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 whitespace-nowrap shrink-0">
-              <span className={`w-2 h-2 rounded-full ${draftStatus === 'saving' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
-              <span>{draftStatus === 'saving' ? 'Saving...' : `Draft saved (${lastSavedTime})`}</span>
-            </div>
-          )}
-
-          {/* Run All Test Cases Button */}
+          {/* Run Tests Button */}
           <button
             onClick={handleRunAllTests}
             disabled={isTesting}
-            className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-brand-600/30 flex items-center space-x-1.5 transition-all disabled:opacity-50 shrink-0"
+            className="px-2.5 py-1 h-7 rounded-md bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold shadow-sm flex items-center space-x-1 transition-all disabled:opacity-50"
             title="Run all evaluation test cases against your solution"
           >
             <FontAwesomeIcon
               icon={isTesting ? faRotateRight : faFlask}
               className={`text-[10px] ${isTesting ? 'animate-spin' : ''}`}
             />
-            <span className="whitespace-nowrap">{isTesting ? 'Testing...' : `Run Tests (${currentTask.testCases?.length || 4})`}</span>
+            <span className="hidden sm:inline">Tests</span>
+            <span className="font-mono text-[11px]">({currentTask.testCases?.length || 4})</span>
           </button>
 
+          {/* Run Code Button */}
           <button
             onClick={handleRunCode}
             disabled={isExecuting}
-            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow flex items-center space-x-1.5 transition-all disabled:opacity-50 shrink-0"
+            className="px-2.5 py-1 h-7 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm flex items-center space-x-1 transition-all disabled:opacity-50"
+            title="Compile & Run with Custom Input"
           >
-            <FontAwesomeIcon icon={faPlay} className="text-[10px]" />
-            <span>Run Code</span>
+            <FontAwesomeIcon icon={faPlay} className="text-[9px]" />
+            <span>Run</span>
           </button>
 
+          {/* Submit Exam Button */}
           <button
             onClick={handleSubmitExam}
             disabled={isSubmitting}
-            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow flex items-center space-x-1.5 transition-all disabled:opacity-50 shrink-0"
+            className="px-3 py-1 h-7 rounded-md bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-brand-600/25 flex items-center space-x-1.5 transition-all disabled:opacity-50"
+            title="Submit exam solution"
           >
             <FontAwesomeIcon icon={faCheck} className="text-[10px]" />
-            <span>Submit Exam</span>
+            <span>Submit</span>
           </button>
         </div>
       </div>

@@ -196,7 +196,7 @@ export default function StudentDashboardPage() {
                 <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
                   <span className="text-[11px] text-slate-400">Deadline: {exam.deadline}</span>
                   <Link
-                    href={`/student/exam?taskId=${exam.id}`}
+                    href={`/student/exam/${exam.id}`}
                     className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white text-xs font-semibold shadow-md shadow-brand-600/30 flex items-center space-x-1.5 transition-all"
                   >
                     <FontAwesomeIcon icon={faPlay} className="text-[10px]" />

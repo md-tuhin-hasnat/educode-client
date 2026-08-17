@@ -10,14 +10,19 @@ import {
   faPaperclip,
   faFileAlt,
   faExternalLinkAlt,
+  faLaptopCode,
+  faAward,
+  faCalendarAlt,
+  faArrowRight,
 } from '@fortawesome/free-solid-svg-icons';
 import { PostContentRenderer } from '@/components/stream/PostContentRenderer';
 import { StreamComments } from '@/components/stream/StreamComments';
 import { CodeBlockItem } from '@/components/stream/RichPostComposer';
-import { StreamPostItem } from './types';
+import { StreamPostItem, CourseTaskItem } from './types';
 
 interface ClassroomStreamTabProps {
   streamPosts?: StreamPostItem[];
+  tasks?: CourseTaskItem[];
   currentUser?: { id?: string; name?: string; role?: string } | null;
   isTeacherOrAdmin: boolean;
   highlightPostId: string | null;
@@ -30,6 +35,7 @@ interface ClassroomStreamTabProps {
 
 export function ClassroomStreamTab({
   streamPosts = [],
+  tasks = [],
   currentUser,
   isTeacherOrAdmin,
   highlightPostId,
@@ -115,6 +121,7 @@ export function ClassroomStreamTab({
         <div className="space-y-6">
           {streamPosts.map((post) => {
             const codeBlocks = parseCodeBlocks(post);
+            const attachedTask = post.task || (post.taskId ? tasks.find((t) => t.id === post.taskId) : null);
 
             return (
               <div
@@ -172,6 +179,74 @@ export function ClassroomStreamTab({
                   isPostRunnable={post.isRunnable ?? true}
                   defaultLanguage={post.language || 'cpp'}
                 />
+
+                {/* Attached Programming Task Widget */}
+                {attachedTask && (
+                  <div className="p-4 bg-gradient-to-r from-purple-950/40 via-slate-900 to-indigo-950/30 border border-purple-500/30 hover:border-purple-500/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg transition-all">
+                    <div className="flex items-start sm:items-center space-x-3.5 overflow-hidden flex-1">
+                      <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 border border-purple-400/30 flex items-center justify-center text-white font-bold text-base shadow-lg shadow-purple-600/30 shrink-0">
+                        <FontAwesomeIcon icon={faLaptopCode} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                            Attached Programming Task
+                          </span>
+                          {attachedTask.taskType && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
+                              {attachedTask.taskType}
+                            </span>
+                          )}
+                          {attachedTask.language && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-teal-300 border border-slate-700 uppercase">
+                              {attachedTask.language}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-sm font-extrabold text-white truncate mt-0.5">
+                          {attachedTask.title}
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 mt-1">
+                          {attachedTask.maxPoints !== undefined && (
+                            <span className="flex items-center space-x-1">
+                              <FontAwesomeIcon icon={faAward} className="text-amber-400 text-[10px]" />
+                              <span>{attachedTask.maxPoints} Points</span>
+                            </span>
+                          )}
+                          {attachedTask.deadline && (
+                            <span className="flex items-center space-x-1">
+                              <FontAwesomeIcon icon={faCalendarAlt} className="text-slate-500 text-[10px]" />
+                              <span>Due {new Date(attachedTask.deadline).toLocaleString()}</span>
+                            </span>
+                          )}
+                          {attachedTask.isExam && (
+                            <span className="text-rose-400 font-bold">• Timed Examination</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center space-x-2 w-full sm:w-auto">
+                      {isTeacherOrAdmin ? (
+                        <a
+                          href={`/teacher/submissions`}
+                          className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all shadow-md"
+                        >
+                          <span>View Submissions</span>
+                          <FontAwesomeIcon icon={faExternalLinkAlt} className="text-[10px]" />
+                        </a>
+                      ) : (
+                        <a
+                          href={`/student/exam/${attachedTask.id}`}
+                          className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-2 shadow-lg shadow-purple-600/30 transition-all active:scale-95"
+                        >
+                          <span>Solve in IDE</span>
+                          <FontAwesomeIcon icon={faArrowRight} className="text-[10px]" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Post File Attachments */}
                 {post.materials && post.materials.length > 0 && (
