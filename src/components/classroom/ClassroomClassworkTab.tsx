@@ -1,6 +1,4 @@
-'use client';
-
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -10,8 +8,10 @@ import {
   faPlus,
   faCode,
   faExternalLinkAlt,
+  faUsers,
 } from '@fortawesome/free-solid-svg-icons';
 import { CourseAssessmentItem, CourseTaskItem } from './types';
+import { AssessmentSubmissionsModal } from './AssessmentSubmissionsModal';
 
 interface ClassroomClassworkTabProps {
   courseId: string;
@@ -31,6 +31,11 @@ export function ClassroomClassworkTab({
   onOpenCreateAssessment,
 }: ClassroomClassworkTabProps) {
   const router = useRouter();
+  const [selectedSubmissionsAssessment, setSelectedSubmissionsAssessment] = useState<{
+    id: string;
+    title: string;
+    type: 'LAB' | 'ASSIGNMENT' | 'EXAM';
+  } | null>(null);
 
   const labs = assessments.filter((a) => a.type === 'LAB');
   const assignments = assessments.filter((a) => a.type === 'ASSIGNMENT');
@@ -126,17 +131,34 @@ export function ClassroomClassworkTab({
                           )}
                         </div>
 
-                        <div className="flex items-center space-x-2.5 shrink-0">
+                        <div className="flex items-center space-x-2.5 shrink-0 flex-wrap gap-y-2">
                           {isTeacherOrAdmin && (
-                            <button
-                              onClick={() =>
-                                router.push(`/teacher/tasks/new?courseId=${courseId}&assessmentId=${lab.id}`)
-                              }
-                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center space-x-1.5 transition-all"
-                            >
-                              <FontAwesomeIcon icon={faPlus} />
-                              <span>Add Task to Lab</span>
-                            </button>
+                            <>
+                              <button
+                                onClick={() =>
+                                  setSelectedSubmissionsAssessment({
+                                    id: lab.id,
+                                    title: lab.title,
+                                    type: 'LAB',
+                                  })
+                                }
+                                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700/80 text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm"
+                                title="View and manage student submissions"
+                              >
+                                <FontAwesomeIcon icon={faUsers} />
+                                <span>Check Submissions</span>
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  router.push(`/teacher/tasks/new?courseId=${courseId}&assessmentId=${lab.id}`)
+                                }
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center space-x-1.5 transition-all"
+                              >
+                                <FontAwesomeIcon icon={faPlus} />
+                                <span>Add Task to Lab</span>
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -249,17 +271,34 @@ export function ClassroomClassworkTab({
                           )}
                         </div>
 
-                        <div className="flex items-center space-x-2.5 shrink-0">
+                        <div className="flex items-center space-x-2.5 shrink-0 flex-wrap gap-y-2">
                           {isTeacherOrAdmin && (
-                            <button
-                              onClick={() =>
-                                router.push(`/teacher/tasks/new?courseId=${courseId}&assessmentId=${assignment.id}`)
-                              }
-                              className="px-3.5 py-1.5 rounded-xl bg-brand-600/20 hover:bg-brand-600/30 text-brand-300 border border-brand-500/30 text-xs font-bold flex items-center space-x-1.5 transition-all"
-                            >
-                              <FontAwesomeIcon icon={faPlus} />
-                              <span>Add Task to Assignment</span>
-                            </button>
+                            <>
+                              <button
+                                onClick={() =>
+                                  setSelectedSubmissionsAssessment({
+                                    id: assignment.id,
+                                    title: assignment.title,
+                                    type: 'ASSIGNMENT',
+                                  })
+                                }
+                                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-brand-300 border border-slate-700/80 text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm"
+                                title="View and manage student submissions"
+                              >
+                                <FontAwesomeIcon icon={faUsers} />
+                                <span>Check Submissions</span>
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  router.push(`/teacher/tasks/new?courseId=${courseId}&assessmentId=${assignment.id}`)
+                                }
+                                className="px-3.5 py-1.5 rounded-xl bg-brand-600/20 hover:bg-brand-600/30 text-brand-300 border border-brand-500/30 text-xs font-bold flex items-center space-x-1.5 transition-all"
+                              >
+                                <FontAwesomeIcon icon={faPlus} />
+                                <span>Add Task to Assignment</span>
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -373,9 +412,24 @@ export function ClassroomClassworkTab({
                           )}
                         </div>
 
-                        <div className="flex items-center space-x-2.5 shrink-0">
+                        <div className="flex items-center space-x-2.5 shrink-0 flex-wrap gap-y-2">
                           {isTeacherOrAdmin ? (
                             <>
+                              <button
+                                onClick={() =>
+                                  setSelectedSubmissionsAssessment({
+                                    id: exam.id,
+                                    title: exam.title,
+                                    type: 'EXAM',
+                                  })
+                                }
+                                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700/80 text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm"
+                                title="View and manage student exam submissions"
+                              >
+                                <FontAwesomeIcon icon={faUsers} />
+                                <span>Check Submissions</span>
+                              </button>
+
                               <button
                                 onClick={() =>
                                   router.push(`/teacher/tasks/new?courseId=${courseId}&assessmentId=${exam.id}`)
@@ -462,6 +516,17 @@ export function ClassroomClassworkTab({
             </div>
           )}
         </div>
+      )}
+
+      {/* Assessment Submissions Inspector Modal */}
+      {selectedSubmissionsAssessment && (
+        <AssessmentSubmissionsModal
+          isOpen={true}
+          onClose={() => setSelectedSubmissionsAssessment(null)}
+          assessmentId={selectedSubmissionsAssessment.id}
+          assessmentTitle={selectedSubmissionsAssessment.title}
+          assessmentType={selectedSubmissionsAssessment.type}
+        />
       )}
     </div>
   );

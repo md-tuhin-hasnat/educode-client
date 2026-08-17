@@ -107,6 +107,7 @@ export default function TeacherTaskEngineeringIDE({
   const [testResults, setTestResults] = useState<TestSuiteResultItem[]>([]);
   const [isEvaluatingSuite, setIsEvaluatingSuite] = useState(false);
   const [suiteCategoryFilter, setSuiteCategoryFilter] = useState<'ALL' | 'SAMPLE' | 'PRETEST' | 'SYSTEM'>('ALL');
+  const [isGeneratingOutputs, setIsGeneratingOutputs] = useState(false);
 
   // Batch Test Case Generator State
   const [batchCount, setBatchCount] = useState<number>(5);
@@ -419,6 +420,92 @@ export default function TeacherTaskEngineeringIDE({
     }
   };
 
+  const handleGenerateOutputsFromSolution = async () => {
+    if (!solutionCode.trim()) {
+      alert('Please write or load your Reference Solution in solution.c/cpp/py/java before generating outputs.');
+      return;
+    }
+    if (testCases.length === 0) {
+      alert('No test cases found. Please add test cases or generate a batch first.');
+      return;
+    }
+
+    setIsGeneratingOutputs(true);
+    setBottomTab('terminal');
+    setIsBottomOpen(true);
+
+    try {
+      const updated = [...testCases];
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < updated.length; i++) {
+        const tc = updated[i];
+        const res = await apiClient.post('/stream/execute', {
+          code: solutionCode,
+          language: normLang,
+          input: tc.inputData || '',
+          timeoutMs: timeLimitMs || 1000,
+        });
+
+        if (res.data && res.data.exitCode === 0) {
+          updated[i] = {
+            ...tc,
+            expectedOutput: (res.data.stdout || '').trim(),
+          };
+          successCount++;
+        } else {
+          failCount++;
+          console.warn(`Solution run failed on Case #${i + 1}:`, res.data?.stderr);
+        }
+      }
+
+      onTestCasesChange(updated);
+      if (failCount === 0) {
+        alert(`Successfully generated expected outputs for all ${successCount} test cases from Reference Solution!`);
+      } else {
+        alert(`Generated outputs for ${successCount} cases. ${failCount} case(s) failed during execution (check reference solution syntax or inputs).`);
+      }
+    } catch (err) {
+      console.error('Failed to generate outputs from solution:', err);
+      alert('Error generating outputs from reference solution.');
+    } finally {
+      setIsGeneratingOutputs(false);
+    }
+  };
+
+  const handleGenerateSingleOutputFromSolution = async (index: number) => {
+    if (!solutionCode.trim()) {
+      alert('Please provide your Reference Solution first.');
+      return;
+    }
+    const tc = testCases[index];
+    if (!tc) return;
+
+    try {
+      const res = await apiClient.post('/stream/execute', {
+        code: solutionCode,
+        language: normLang,
+        input: tc.inputData || '',
+        timeoutMs: timeLimitMs || 1000,
+      });
+
+      if (res.data && res.data.exitCode === 0) {
+        const updated = [...testCases];
+        updated[index] = {
+          ...tc,
+          expectedOutput: (res.data.stdout || '').trim(),
+        };
+        onTestCasesChange(updated);
+      } else {
+        alert(`Failed to execute solution for Case #${index + 1}: ${res.data?.stderr || 'Non-zero exit code'}`);
+      }
+    } catch (err) {
+      console.error('Failed to generate single output:', err);
+      alert('Error executing solution for this test case.');
+    }
+  };
+
   const handleTestCheckerInteractively = async () => {
     setIsTestingChecker(true);
     setBottomTab('checkertest');
@@ -461,20 +548,16 @@ export default function TeacherTaskEngineeringIDE({
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col space-y-3 bg-[#0d1117] text-slate-100 p-4 rounded-3xl border border-slate-800 shadow-2xl transition-all ${
+      className={`flex flex-col bg-[#0d1117] text-slate-100 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden transition-all ${
         isFullScreen ? 'fixed inset-0 z-50 rounded-none overflow-y-auto' : ''
       } ${className}`}
     >
-      {/* Header Toolbar */}
+      {/* 1. Unified Professional Header */}
       <TaskEngineeringHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         fileNames={fileNames}
         testCases={testCases}
-        timeLimitMs={timeLimitMs}
-        onTimeLimitChange={onTimeLimitChange}
-        memoryLimitMb={memoryLimitMb}
-        onMemoryLimitChange={onMemoryLimitChange}
         themeId={themeId}
         setThemeId={setThemeId}
         fontSize={fontSize}
@@ -496,7 +579,7 @@ export default function TeacherTaskEngineeringIDE({
         isGeneratingBatch={isGeneratingBatch}
       />
 
-      {/* Tab Specific Configuration Banner */}
+      {/* 2. Contextual Sub-Toolbar (Only shown for active tabs with options) */}
       {activeTab === 'checker' && (
         <CheckerEditorTab
           currentChecker={currentChecker}
@@ -526,11 +609,6 @@ export default function TeacherTaskEngineeringIDE({
         <SolutionEditorTab
           language={normLang}
           onGenerateTemplateFromSolution={handleGenerateTemplateFromSolution}
-          customStdin={customStdin}
-          setCustomStdin={setCustomStdin}
-          isRunning={isRunning}
-          onRunSolution={handleRunActiveCode}
-          runResult={runResult}
         />
       )}
 
@@ -542,26 +620,28 @@ export default function TeacherTaskEngineeringIDE({
       )}
 
       {activeTab === 'testsuite' && (
-        <TestSuiteMatrixTab
-          testCases={testCases}
-          onTestCasesChange={onTestCasesChange}
-          suiteCategoryFilter={suiteCategoryFilter}
-          setSuiteCategoryFilter={setSuiteCategoryFilter}
-          testResults={testResults}
-          isEvaluatingSuite={isEvaluatingSuite}
-          onEvaluateTestSuite={handleEvaluateTestSuite}
-          onOpenBatchDrawer={() => setActiveTab('generator')}
-        />
+        <div className="p-3 bg-[#0d1117]">
+          <TestSuiteMatrixTab
+            testCases={testCases}
+            onTestCasesChange={onTestCasesChange}
+            suiteCategoryFilter={suiteCategoryFilter}
+            setSuiteCategoryFilter={setSuiteCategoryFilter}
+            testResults={testResults}
+            isEvaluatingSuite={isEvaluatingSuite}
+            onEvaluateTestSuite={handleEvaluateTestSuite}
+            onOpenBatchDrawer={() => setActiveTab('generator')}
+            onGenerateOutputsFromSolution={handleGenerateOutputsFromSolution}
+            isGeneratingOutputs={isGeneratingOutputs}
+            onGenerateSingleOutputFromSolution={handleGenerateSingleOutputFromSolution}
+          />
+        </div>
       )}
 
-      {/* Monaco Code Editor (Shown for code tabs: solution, generator, checker, template) */}
+      {/* 3. Monaco Code Editor & Bottom Console Dock (for code tabs) */}
       {activeTab !== 'testsuite' && (
-        <div className="rounded-2xl border border-slate-800/90 overflow-hidden shadow-inner bg-[#1e1e1e]">
-          <div className="h-8 bg-slate-900/90 px-4 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
-            <span>{currentEditor.filename}</span>
-            <span className="text-[10px] text-slate-500 uppercase">{currentEditor.lang}</span>
-          </div>
-          <div className="h-[420px] w-full">
+        <div className="flex flex-col bg-[#1e1e1e]">
+          {/* Monaco Editor Container */}
+          <div className="h-[430px] w-full">
             <Editor
               height="100%"
               language={currentEditor.lang}
@@ -582,8 +662,304 @@ export default function TeacherTaskEngineeringIDE({
               }}
             />
           </div>
+
+          {/* Integrated Collapsible Bottom Developer Dock */}
+          <div className="border-t border-slate-800 bg-slate-950">
+            {/* Dock Header Bar */}
+            <div className="flex items-center justify-between px-3 py-1.5 bg-[#161b22] border-b border-slate-800 text-xs">
+              <div className="flex items-center space-x-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBottomTab('terminal');
+                    setIsBottomOpen(true);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+                    bottomTab === 'terminal' && isBottomOpen
+                      ? 'bg-slate-800 text-emerald-300 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faTerminal} className="text-[10px]" />
+                  <span>Execution Output</span>
+                  {runResult && (
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        runResult.exitCode === 0 ? 'bg-emerald-400' : 'bg-rose-400'
+                      }`}
+                    />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBottomTab('testsuite');
+                    setIsBottomOpen(true);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+                    bottomTab === 'testsuite' && isBottomOpen
+                      ? 'bg-slate-800 text-indigo-300 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faFlask} className="text-[10px]" />
+                  <span>Suite Results</span>
+                  {testResults.length > 0 && (
+                    <span className="text-[10px] font-mono opacity-80">
+                      ({testResults.filter((r) => r.passed).length}/{testResults.length})
+                    </span>
+                  )}
+                </button>
+
+                {activeTab === 'generator' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBottomTab('batchgen');
+                      setIsBottomOpen(true);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+                      bottomTab === 'batchgen' && isBottomOpen
+                        ? 'bg-slate-800 text-amber-300 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faWandMagicSparkles} className="text-[10px]" />
+                    <span>Generator Logs</span>
+                  </button>
+                )}
+
+                {activeTab === 'checker' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBottomTab('checkertest');
+                      setIsBottomOpen(true);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+                      bottomTab === 'checkertest' && isBottomOpen
+                        ? 'bg-slate-800 text-cyan-300 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faScaleBalanced} className="text-[10px]" />
+                    <span>Checker Tester</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Expand / Collapse Control */}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBottomOpen(!isBottomOpen)}
+                  className="px-2 py-0.5 text-xs text-slate-400 hover:text-slate-200 flex items-center space-x-1 transition-colors"
+                  title={isBottomOpen ? 'Collapse Dock' : 'Expand Dock'}
+                >
+                  <FontAwesomeIcon icon={isBottomOpen ? faChevronDown : faChevronUp} className="text-[10px]" />
+                  <span className="text-[11px]">{isBottomOpen ? 'Collapse' : 'Expand'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Dock Content Body */}
+            {isBottomOpen && (
+              <div className="p-3 bg-slate-950/90">
+                {/* 1. Terminal / Execution Output Tab */}
+                {bottomTab === 'terminal' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-400 font-sans uppercase tracking-wider">
+                          Custom Input (stdin):
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleRunActiveCode}
+                          disabled={isRunning}
+                          className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-sans font-bold text-[10px] flex items-center space-x-1 transition-colors disabled:opacity-50"
+                        >
+                          <FontAwesomeIcon icon={faPlay} className="text-[8px]" />
+                          <span>{isRunning ? 'Running...' : 'Run with Input'}</span>
+                        </button>
+                      </div>
+                      <textarea
+                        rows={4}
+                        value={customStdin}
+                        onChange={(e) => setCustomStdin(e.target.value)}
+                        placeholder="Provide standard input for execution..."
+                        className="w-full min-h-[96px] bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-slate-700 resize-y font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-400 font-sans uppercase tracking-wider">
+                          Execution Output:
+                        </label>
+                        {runResult && (
+                          <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                            <span className={runResult.exitCode === 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                              Exit {runResult.exitCode}
+                            </span>
+                            <span>•</span>
+                            <span>{runResult.durationMs}ms</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="h-[96px] bg-slate-900 border border-slate-800 rounded-xl p-2.5 overflow-y-auto text-xs font-mono">
+                        {runResult ? (
+                          <div>
+                            {runResult.stdout && (
+                              <pre className="text-emerald-300 whitespace-pre-wrap">{runResult.stdout}</pre>
+                            )}
+                            {runResult.stderr && (
+                              <pre className="text-rose-400 whitespace-pre-wrap">{runResult.stderr}</pre>
+                            )}
+                            {!runResult.stdout && !runResult.stderr && (
+                              <span className="text-slate-500 italic">(Process completed with no output)</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 italic">
+                            Click "Run" or "Run with Input" to execute code.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Suite Results Tab */}
+                {bottomTab === 'testsuite' && (
+                  <div className="space-y-2">
+                    {testResults.length === 0 ? (
+                      <div className="text-center py-4 text-xs text-slate-500">
+                        No test suite results yet. Click <strong>Evaluate Suite</strong> above to run all cases.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto font-mono text-xs">
+                        {testResults.map((res, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-2 rounded-xl border flex items-center justify-between gap-2 text-xs ${
+                              res.passed
+                                ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                                : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <FontAwesomeIcon
+                                icon={res.passed ? faCheckCircle : faTimes}
+                                className={res.passed ? 'text-emerald-400' : 'text-rose-400'}
+                              />
+                              <span className="font-bold">Case #{idx + 1}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                                {res.testType}
+                              </span>
+                              <span className="text-slate-400 font-normal truncate max-w-xs">
+                                in: "{res.inputData.slice(0, 20)}"
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-3 text-[11px]">
+                              <span>{res.durationMs}ms</span>
+                              <span className="font-bold">{res.passed ? 'PASSED' : res.message || 'FAILED'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Batch Generator Logs Tab */}
+                {bottomTab === 'batchgen' && (
+                  <div className="space-y-1 max-h-44 overflow-y-auto font-mono text-xs">
+                    {generatorLogs.length === 0 ? (
+                      <div className="text-slate-500 italic py-2">No generator logs yet.</div>
+                    ) : (
+                      generatorLogs.map((log, idx) => (
+                        <div key={idx} className="text-slate-300 text-[11px]">
+                          {log}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* 4. Checker Tester Tab */}
+                {bottomTab === 'checkertest' && (
+                  <div className="space-y-3 font-mono text-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 font-sans block mb-1">
+                          Test Input (stdin):
+                        </label>
+                        <input
+                          type="text"
+                          value={checkerSampleIn}
+                          onChange={(e) => setCheckerSampleIn(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 font-sans block mb-1">
+                          Jury Answer (expected):
+                        </label>
+                        <input
+                          type="text"
+                          value={checkerSampleJury}
+                          onChange={(e) => setCheckerSampleJury(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 font-sans block mb-1">
+                          Student Output (actual):
+                        </label>
+                        <input
+                          type="text"
+                          value={checkerSampleUser}
+                          onChange={(e) => setCheckerSampleUser(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={handleTestCheckerInteractively}
+                        disabled={isTestingChecker}
+                        className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center space-x-1 disabled:opacity-50 font-sans"
+                      >
+                        <FontAwesomeIcon icon={faScaleBalanced} className="text-[10px]" />
+                        <span>{isTestingChecker ? 'Evaluating...' : 'Evaluate Output Verdict'}</span>
+                      </button>
+
+                      {checkerTestVerdict && (
+                        <div
+                          className={`px-3 py-1 rounded-lg border text-xs font-bold flex items-center space-x-2 ${
+                            checkerTestVerdict.passed
+                              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                              : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                          }`}
+                        >
+                          <FontAwesomeIcon icon={checkerTestVerdict.passed ? faCheckCircle : faTimes} />
+                          <span>{checkerTestVerdict.passed ? 'ACCEPTED (AC)' : 'WRONG ANSWER (WA)'}</span>
+                          <span className="font-normal opacity-75">({checkerTestVerdict.message})</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
+

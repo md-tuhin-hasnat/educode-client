@@ -93,7 +93,7 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roleUpper = (user?.role || '').toUpperCase();
-  const isTeacherOrAdmin = roleUpper === 'ADMIN' || roleUpper === 'TEACHER';
+  const isTeacherOrAdmin = roleUpper === 'ADMIN' || roleUpper === 'TEACHER' || roleUpper === 'TA';
 
   const fetchCourse = useCallback(async () => {
     try {
@@ -222,11 +222,13 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
   }, [courseId, fetchCourse]);
 
   const handleOpenNewComposer = () => {
+    if (!isTeacherOrAdmin) return;
     setEditingPost(null);
     setShowRichComposer(true);
   };
 
   const handleEditPost = (post: StreamPostItem) => {
+    if (!isTeacherOrAdmin) return;
     setEditingPost(post);
     setShowRichComposer(true);
   };
@@ -397,6 +399,7 @@ export const ClassroomHub: React.FC<ClassroomHubProps> = ({ courseId }) => {
       {activeTab === 'grades' && (
         <ClassroomGradesTab
           tasks={course.tasks}
+          assessments={course.assessments}
           enrollmentCount={course.enrollments?.length || 0}
         />
       )}

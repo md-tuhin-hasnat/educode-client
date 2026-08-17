@@ -137,25 +137,28 @@ export async function runSingleTestCase(
     let errorDetails: string | undefined = undefined;
     let passed = false;
 
+    const isHidden = testCase.isHidden || category !== 'SAMPLE';
     const testLabel =
       category === 'PRETEST'
-        ? `pretest ${orderNum}`
+        ? `Pretest #${orderNum}`
         : category === 'SYSTEM'
-        ? `system test ${orderNum}`
-        : `test case ${orderNum}`;
+        ? `System Test #${orderNum}`
+        : `Sample #${orderNum}`;
 
     if (compilationError || (exitCode !== 0 && stderr.toLowerCase().includes('error:'))) {
       status = 'COMPILATION_ERROR';
       errorDetails = compilationError || stderr;
-      logMessage = `compilation error on ${testLabel}`;
+      logMessage = `${testLabel}: Compilation Error (CE)`;
     } else if (timedOut || timeMs >= timeoutMs) {
       status = 'TIME_LIMIT_EXCEEDED';
       errorDetails = `Execution exceeded time limit of ${timeoutMs / 1000}s`;
-      logMessage = `time limit exceeded on ${testLabel}`;
+      logMessage = `${testLabel}: Time Limit Exceeded (TLE) [>${timeoutMs}ms]`;
     } else if (exitCode !== 0) {
       status = 'RUNTIME_ERROR';
-      errorDetails = stderr || `Process exited with code ${exitCode}`;
-      logMessage = `runtime error on ${testLabel}`;
+      errorDetails = isHidden
+        ? `Runtime error occurred (Exit code ${exitCode})`
+        : stderr || `Process exited with code ${exitCode}`;
+      logMessage = `${testLabel}: Runtime Error (RTE) [Exit ${exitCode}]`;
     } else {
       // Run Polygon-style checker evaluation
       const verdict = await evaluateTestCaseOutput(
@@ -168,29 +171,33 @@ export async function runSingleTestCase(
       if (verdict.passed) {
         status = 'PASSED';
         passed = true;
-        logMessage = `passed ${orderNum}/${total} (${category})`;
+        logMessage = `${testLabel}: Passed (AC) [${timeMs}ms]`;
       } else {
         status = 'WRONG_ANSWER';
-        errorDetails = verdict.diffDetails
-          ? `${verdict.message}\n\n${verdict.diffDetails}`
-          : verdict.message;
-        logMessage = `wrong answer on ${testLabel}`;
+        if (!isHidden) {
+          errorDetails = verdict.diffDetails
+            ? `${verdict.message}\n\n${verdict.diffDetails}`
+            : verdict.message;
+        } else {
+          errorDetails = 'Wrong Answer on hidden test case';
+        }
+        logMessage = `${testLabel}: Wrong Answer (WA) [${timeMs}ms]`;
       }
     }
 
     return {
       testCaseId: testCase.id,
       order: orderNum,
-      inputData: testCase.inputData || '',
-      expectedOutput: testCase.expectedOutput || '',
-      actualOutput: stdout,
+      inputData: isHidden ? '' : testCase.inputData || '',
+      expectedOutput: isHidden ? '' : testCase.expectedOutput || '',
+      actualOutput: isHidden ? '' : stdout,
       status,
       passed,
       timeMs,
       points: passed ? maxPoints : 0,
       maxPoints,
-      errorDetails,
-      isHidden: testCase.isHidden ?? (category !== 'SAMPLE'),
+      errorDetails: isHidden && status !== 'COMPILATION_ERROR' ? undefined : errorDetails,
+      isHidden,
       testType: category,
       logMessage,
     };
@@ -198,21 +205,29 @@ export async function runSingleTestCase(
     const errorDetails = err?.message || 'Execution failed';
     const category: TestCaseCategory =
       testCase.testType || (testCase.isHidden ? 'PRETEST' : 'SAMPLE');
+    const isHidden = testCase.isHidden || category !== 'SAMPLE';
+    const testLabel =
+      category === 'PRETEST'
+        ? `Pretest #${orderNum}`
+        : category === 'SYSTEM'
+        ? `System Test #${orderNum}`
+        : `Sample #${orderNum}`;
+
     return {
       testCaseId: testCase.id,
       order: orderNum,
-      inputData: testCase.inputData || '',
-      expectedOutput: testCase.expectedOutput || '',
+      inputData: isHidden ? '' : testCase.inputData || '',
+      expectedOutput: isHidden ? '' : testCase.expectedOutput || '',
       actualOutput: '',
       status: 'RUNTIME_ERROR',
       passed: false,
       timeMs: 0,
       points: 0,
       maxPoints,
-      errorDetails,
-      isHidden: testCase.isHidden ?? (category !== 'SAMPLE'),
+      errorDetails: isHidden ? undefined : errorDetails,
+      isHidden,
       testType: category,
-      logMessage: `error on test ${orderNum}: ${errorDetails}`,
+      logMessage: `${testLabel}: Execution Error (RTE)`,
     };
   }
 }

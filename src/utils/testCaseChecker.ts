@@ -325,10 +325,11 @@ export interface TaskWorkbenchMetadata {
   checkerConfig?: CheckerConfig;
   timeLimitMs?: number;    // Execution time limit in ms (default: 1000ms / 1.0s)
   memoryLimitMb?: number;  // Memory limit in MB (default: 256MB)
+  testTypes?: Record<string | number, string>;
 }
 
 /**
- * Serializes all teacher workbench engineering codes and limits (solution, generator, template, checker, limits)
+ * Serializes all teacher workbench engineering codes and limits (solution, generator, template, checker, limits, testTypes)
  * into task description metadata comment.
  */
 export function serializeTaskWorkbenchMetadata(
@@ -347,6 +348,7 @@ export function serializeTaskWorkbenchMetadata(
     checkerConfig: meta.checkerConfig || DEFAULT_CHECKER_CONFIG,
     timeLimitMs: meta.timeLimitMs ?? 1000,
     memoryLimitMb: meta.memoryLimitMb ?? 256,
+    testTypes: meta.testTypes || {},
   });
 
   return `${cleanedDesc}\n\n<!--educode-task-meta:${metaJson}-->`.trim();
@@ -367,6 +369,7 @@ export function parseTaskWorkbenchMetadata(
       checkerConfig: { ...DEFAULT_CHECKER_CONFIG },
       timeLimitMs: 1000,
       memoryLimitMb: 256,
+      testTypes: {},
     };
   }
 
@@ -382,6 +385,7 @@ export function parseTaskWorkbenchMetadata(
         checkerConfig: parsed.checkerConfig || { ...DEFAULT_CHECKER_CONFIG },
         timeLimitMs: typeof parsed.timeLimitMs === 'number' ? parsed.timeLimitMs : 1000,
         memoryLimitMb: typeof parsed.memoryLimitMb === 'number' ? parsed.memoryLimitMb : 256,
+        testTypes: parsed.testTypes || {},
       };
     } catch {
       // ignore

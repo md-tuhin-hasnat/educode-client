@@ -43,9 +43,17 @@ export const ClientWrapper: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-900 text-slate-100 overflow-hidden">
       <TitleBar />
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {!hideAppSidebar && <Sidebar />}
-        <main className={`flex-1 overflow-y-auto ${isZeroPadding ? 'p-0 bg-slate-950' : 'bg-slate-950/40 p-6'}`}>
+        <main
+          className={`flex-1 ${
+            isIdeWorkspacePage
+              ? 'overflow-hidden flex flex-col h-full p-0 bg-slate-950 min-h-0'
+              : isDocsPage
+              ? 'overflow-y-auto p-0 bg-slate-950'
+              : 'overflow-y-auto bg-slate-950/40 p-6'
+          }`}
+        >
           {children}
         </main>
       </div>

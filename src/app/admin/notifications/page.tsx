@@ -53,7 +53,7 @@ export default function AdminNotificationsPage() {
   const fetchNotifications = React.useCallback(async () => {
     setLoading(true);
     try {
-      let query = `${API_URL}/notifications?limit=50`;
+      let query = `${API_URL}/notifications?limit=50&userId=ALL`;
       if (selectedSeverity !== 'ALL') {
         query += `&severity=${selectedSeverity}`;
       }

@@ -83,30 +83,32 @@ export function ClassroomStreamTab({
 
   return (
     <div className="space-y-6">
-      {/* Post Creation Box */}
-      <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-600 to-brand-800 border border-brand-500/40 flex items-center justify-center text-white font-bold text-xs shadow-md">
-            {currentUser?.name?.charAt(0) || 'U'}
+      {/* Post Creation Box - Only visible to Teacher, TA, and Admin */}
+      {isTeacherOrAdmin && (
+        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-600 to-brand-800 border border-brand-500/40 flex items-center justify-center text-white font-bold text-xs shadow-md">
+              {currentUser?.name?.charAt(0) || 'U'}
+            </div>
+            <button
+              onClick={onOpenNewComposer}
+              className="flex-1 bg-slate-900/90 border border-slate-700/80 hover:border-brand-500 rounded-xl px-4 py-3 text-xs text-left text-slate-400 hover:text-slate-200 transition-all flex items-center justify-between shadow-inner"
+            >
+              <span>Announce something to your class (Markdown, Code Blocks, Attachments)...</span>
+              <span className="px-2.5 py-1 rounded-lg bg-brand-500/20 text-brand-300 text-[10px] font-bold border border-brand-500/30">
+                Rich Editor
+              </span>
+            </button>
+            <button
+              onClick={onOpenNewComposer}
+              className="px-4 py-3 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-brand-600/30 flex items-center space-x-2 transition-all active:scale-95 shrink-0"
+            >
+              <FontAwesomeIcon icon={faPlus} />
+              <span>New Post</span>
+            </button>
           </div>
-          <button
-            onClick={onOpenNewComposer}
-            className="flex-1 bg-slate-900/90 border border-slate-700/80 hover:border-brand-500 rounded-xl px-4 py-3 text-xs text-left text-slate-400 hover:text-slate-200 transition-all flex items-center justify-between shadow-inner"
-          >
-            <span>Announce something to your class (Markdown, Code Blocks, Attachments)...</span>
-            <span className="px-2.5 py-1 rounded-lg bg-brand-500/20 text-brand-300 text-[10px] font-bold border border-brand-500/30">
-              Rich Editor
-            </span>
-          </button>
-          <button
-            onClick={onOpenNewComposer}
-            className="px-4 py-3 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-brand-600/30 flex items-center space-x-2 transition-all active:scale-95 shrink-0"
-          >
-            <FontAwesomeIcon icon={faPlus} />
-            <span>New Post</span>
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Stream Feed */}
       {streamPosts.length === 0 ? (
@@ -114,7 +116,9 @@ export function ClassroomStreamTab({
           <FontAwesomeIcon icon={faStream} className="text-4xl text-slate-600 mb-2" />
           <p className="text-sm font-bold text-slate-200">Class Stream is Empty</p>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Post announcements, runnable code snippets, homework notes, or start a discussion thread.
+            {isTeacherOrAdmin
+              ? 'Post announcements, runnable code snippets, homework notes, or attach task assessments.'
+              : 'No announcements have been posted to this class stream yet.'}
           </p>
         </div>
       ) : (
@@ -152,7 +156,7 @@ export function ClassroomStreamTab({
                     </div>
                   </div>
 
-                  {(isTeacherOrAdmin || currentUser?.id === post.author?.id) && (
+                  {isTeacherOrAdmin && (
                     <div className="flex items-center space-x-1">
                       <button
                         onClick={() => onEditPost(post)}

@@ -14,4 +14,5 @@ export interface TestCaseRunnerPanelProps {
   checkerConfig?: CheckerConfig;
   timeLimitMs?: number;
   memoryLimitMb?: number;
+  showLogs?: boolean;
 }

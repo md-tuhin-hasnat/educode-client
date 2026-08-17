@@ -10,8 +10,6 @@ import {
   faLayerGroup,
   faPlay,
   faFlask,
-  faClock,
-  faMicrochip,
   faPalette,
   faFont,
   faCopy,
@@ -28,10 +26,6 @@ interface TaskEngineeringHeaderProps {
   setActiveTab: (tab: WorkspaceTab) => void;
   fileNames: Record<string, string>;
   testCases: TestCaseItem[];
-  timeLimitMs: number;
-  onTimeLimitChange?: (val: number) => void;
-  memoryLimitMb: number;
-  onMemoryLimitChange?: (val: number) => void;
   themeId: string;
   setThemeId: (theme: string) => void;
   fontSize: number;
@@ -53,10 +47,6 @@ export function TaskEngineeringHeader({
   setActiveTab,
   fileNames,
   testCases,
-  timeLimitMs,
-  onTimeLimitChange,
-  memoryLimitMb,
-  onMemoryLimitChange,
   themeId,
   setThemeId,
   fontSize,
@@ -73,84 +63,97 @@ export function TaskEngineeringHeader({
   isGeneratingBatch,
 }: TaskEngineeringHeaderProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-slate-950/80 border border-slate-800 backdrop-blur-md">
-      {/* Tab Switcher Pills */}
-      <div className="flex items-center space-x-1.5 p-1 bg-slate-900 border border-slate-800/80 rounded-xl overflow-x-auto">
+    <div className="flex flex-wrap items-center justify-between bg-[#161b22] border border-slate-800 rounded-t-2xl px-3 pt-2 pb-0 shadow-lg gap-2">
+      {/* Left: Professional IDE File Tabs */}
+      <div className="flex items-center space-x-1 overflow-x-auto">
+        {/* Solution Tab */}
         <button
           type="button"
           onClick={() => setActiveTab('solution')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 ${
+          className={`h-9 px-3.5 rounded-t-xl text-xs font-semibold flex items-center space-x-2 border-t-2 transition-all shrink-0 ${
             activeTab === 'solution'
-              ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              ? 'bg-[#1e1e1e] text-white border-t-emerald-500 border-x border-slate-800 shadow-md'
+              : 'border-t-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
+          title={`Official Reference Solution (${fileNames.solution})`}
         >
-          <FontAwesomeIcon icon={faCode} />
-          <span>Solution ({fileNames.solution})</span>
+          <FontAwesomeIcon icon={faCode} className={`text-xs ${activeTab === 'solution' ? 'text-emerald-400' : 'text-slate-500'}`} />
+          <span className="font-mono">{fileNames.solution}</span>
         </button>
 
+        {/* Generator Tab */}
         <button
           type="button"
           onClick={() => setActiveTab('generator')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 ${
+          className={`h-9 px-3.5 rounded-t-xl text-xs font-semibold flex items-center space-x-2 border-t-2 transition-all shrink-0 ${
             activeTab === 'generator'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              ? 'bg-[#1e1e1e] text-white border-t-amber-500 border-x border-slate-800 shadow-md'
+              : 'border-t-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
+          title={`Test Case Generator Script (${fileNames.generator})`}
         >
-          <FontAwesomeIcon icon={faWandMagicSparkles} />
-          <span>Generator ({fileNames.generator})</span>
+          <FontAwesomeIcon icon={faWandMagicSparkles} className={`text-xs ${activeTab === 'generator' ? 'text-amber-400' : 'text-slate-500'}`} />
+          <span className="font-mono">{fileNames.generator}</span>
         </button>
 
+        {/* Checker Tab */}
         <button
           type="button"
           onClick={() => setActiveTab('checker')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 ${
+          className={`h-9 px-3.5 rounded-t-xl text-xs font-semibold flex items-center space-x-2 border-t-2 transition-all shrink-0 ${
             activeTab === 'checker'
-              ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              ? 'bg-[#1e1e1e] text-white border-t-cyan-500 border-x border-slate-800 shadow-md'
+              : 'border-t-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
+          title={`Output & Precision Checker (${fileNames.checker})`}
         >
-          <FontAwesomeIcon icon={faScaleBalanced} />
-          <span>Checker ({fileNames.checker})</span>
+          <FontAwesomeIcon icon={faScaleBalanced} className={`text-xs ${activeTab === 'checker' ? 'text-cyan-400' : 'text-slate-500'}`} />
+          <span className="font-mono">{fileNames.checker}</span>
         </button>
 
+        {/* Starter Template Tab */}
         <button
           type="button"
           onClick={() => setActiveTab('template')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 ${
+          className={`h-9 px-3.5 rounded-t-xl text-xs font-semibold flex items-center space-x-2 border-t-2 transition-all shrink-0 ${
             activeTab === 'template'
-              ? 'bg-purple-500 text-slate-950 shadow-md shadow-purple-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              ? 'bg-[#1e1e1e] text-white border-t-purple-500 border-x border-slate-800 shadow-md'
+              : 'border-t-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
+          title={`Student Starter Skeleton (${fileNames.template})`}
         >
-          <FontAwesomeIcon icon={faFileCode} />
-          <span>Starter Template ({fileNames.template})</span>
+          <FontAwesomeIcon icon={faFileCode} className={`text-xs ${activeTab === 'template' ? 'text-purple-400' : 'text-slate-500'}`} />
+          <span className="font-mono">{fileNames.template}</span>
         </button>
 
+        {/* Test Suite Matrix Tab */}
         <button
           type="button"
           onClick={() => setActiveTab('testsuite')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 ${
+          className={`h-9 px-3.5 rounded-t-xl text-xs font-semibold flex items-center space-x-2 border-t-2 transition-all shrink-0 ${
             activeTab === 'testsuite'
-              ? 'bg-brand-500 text-white shadow-md shadow-brand-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              ? 'bg-[#1e1e1e] text-white border-t-brand-500 border-x border-slate-800 shadow-md'
+              : 'border-t-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
+          title={`Comprehensive Test Suite (${testCases.length} test cases)`}
         >
-          <FontAwesomeIcon icon={faLayerGroup} />
-          <span>Test Suite ({testCases.length})</span>
+          <FontAwesomeIcon icon={faLayerGroup} className={`text-xs ${activeTab === 'testsuite' ? 'text-brand-400' : 'text-slate-500'}`} />
+          <span>Test Suite</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-brand-500/20 text-brand-300 border border-brand-500/40">
+            {testCases.length}
+          </span>
         </button>
       </div>
 
-      {/* Action Toolbar */}
-      <div className="flex items-center space-x-2 flex-wrap gap-y-2">
-        {/* Run Active Code Button */}
+      {/* Right: Unified Action Buttons & IDE Utilities */}
+      <div className="flex items-center space-x-2 pb-2">
+        {/* Primary Tab Execution Button */}
         {activeTab !== 'testsuite' && (
           <button
             type="button"
             onClick={onRunActiveTab}
             disabled={isRunning || isGeneratingBatch}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all shadow-md ${
+            className={`h-7.5 px-3 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-md ${
               activeTab === 'solution'
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
                 : activeTab === 'generator'
@@ -159,8 +162,9 @@ export function TaskEngineeringHeader({
                 ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/20'
                 : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20'
             } disabled:opacity-50 disabled:cursor-not-allowed`}
+            title="Execute current file in container sandbox"
           >
-            <FontAwesomeIcon icon={faPlay} className="text-[11px]" />
+            <FontAwesomeIcon icon={faPlay} className="text-[10px]" />
             <span>
               {activeTab === 'solution'
                 ? 'Run Solution'
@@ -168,76 +172,33 @@ export function TaskEngineeringHeader({
                 ? 'Generate Case'
                 : activeTab === 'checker'
                 ? 'Run Checker'
-                : 'Test Template'}
+                : 'Test Starter'}
             </span>
           </button>
         )}
 
-        {/* Evaluate Full Suite Button */}
+        {/* Evaluate Suite Button */}
         <button
           type="button"
           onClick={onEvaluateSuite}
           disabled={isEvaluatingSuite || testCases.length === 0}
-          className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white flex items-center space-x-2 transition-all shadow-md shadow-brand-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="h-7.5 px-3 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white flex items-center space-x-1.5 transition-all shadow-md shadow-brand-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
           title="Run reference solution against all test cases"
         >
-          <FontAwesomeIcon icon={faFlask} className="text-[11px]" />
+          <FontAwesomeIcon icon={faFlask} className="text-[10px]" />
           <span>Evaluate Suite</span>
+          <span className="font-mono text-[10px] opacity-80">({testCases.length})</span>
         </button>
 
-        {/* Reset Active Boilerplate */}
-        <button
-          type="button"
-          onClick={onResetActiveBoilerplate}
-          className="p-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold rounded-xl border border-slate-800 transition-colors"
-          title="Reset to default starter boilerplate"
-        >
-          <FontAwesomeIcon icon={faRotateLeft} />
-        </button>
-
-        {/* Execution Limits Widget (Time & Memory Limit) */}
-        <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1 text-xs">
-          <div className="flex items-center space-x-1.5 text-slate-300" title="Task Execution Time Limit">
-            <FontAwesomeIcon icon={faClock} className="text-amber-400 text-[11px]" />
-            <span className="text-[10px] text-slate-400 font-semibold hidden sm:inline">Time:</span>
-            <select
-              value={timeLimitMs}
-              onChange={(e) => onTimeLimitChange?.(Number(e.target.value))}
-              className="bg-slate-950 border border-slate-700 text-amber-300 font-bold rounded px-1.5 py-0.5 text-[11px] outline-none cursor-pointer"
-            >
-              <option value={500}>0.5s</option>
-              <option value={1000}>1.0s</option>
-              <option value={2000}>2.0s</option>
-              <option value={3000}>3.0s</option>
-              <option value={5000}>5.0s</option>
-              <option value={10000}>10.0s</option>
-            </select>
-          </div>
-          <div className="h-3.5 w-px bg-slate-700" />
-          <div className="flex items-center space-x-1.5 text-slate-300" title="Task Memory Limit">
-            <FontAwesomeIcon icon={faMicrochip} className="text-cyan-400 text-[11px]" />
-            <span className="text-[10px] text-slate-400 font-semibold hidden sm:inline">Mem:</span>
-            <select
-              value={memoryLimitMb}
-              onChange={(e) => onMemoryLimitChange?.(Number(e.target.value))}
-              className="bg-slate-950 border border-slate-700 text-cyan-300 font-bold rounded px-1.5 py-0.5 text-[11px] outline-none cursor-pointer"
-            >
-              <option value={128}>128 MB</option>
-              <option value={256}>256 MB</option>
-              <option value={512}>512 MB</option>
-              <option value={1024}>1024 MB</option>
-            </select>
-          </div>
-        </div>
+        <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
 
         {/* Theme Selector */}
-        <div className="flex items-center space-x-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1">
-          <FontAwesomeIcon icon={faPalette} className="text-slate-400 text-xs" />
+        <div className="flex items-center space-x-1 bg-slate-900 border border-slate-800 rounded-xl px-2 h-7.5" title="Monaco Theme">
+          <FontAwesomeIcon icon={faPalette} className="text-slate-400 text-[10px]" />
           <select
             value={themeId}
             onChange={(e) => setThemeId(e.target.value)}
-            className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer pr-1"
-            title="Editor Theme"
+            className="bg-transparent text-[11px] text-slate-300 outline-none cursor-pointer max-w-[85px] truncate"
           >
             {PRESET_THEMES.map((t) => (
               <option key={t.id} value={t.id} className="bg-slate-900 text-white">
@@ -247,49 +208,60 @@ export function TaskEngineeringHeader({
           </select>
         </div>
 
-        {/* Font Size Adjust */}
-        <div className="flex items-center space-x-1 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1">
-          <FontAwesomeIcon icon={faFont} className="text-slate-400 text-xs mr-1" />
+        {/* Font Size Adjuster */}
+        <div className="flex items-center space-x-0.5 bg-slate-900 border border-slate-800 rounded-xl px-1.5 h-7.5">
+          <FontAwesomeIcon icon={faFont} className="text-slate-400 text-[9px] mr-0.5" />
           <button
             type="button"
             onClick={() => setFontSize((s) => Math.max(11, s - 1))}
-            className="px-1.5 text-xs text-slate-400 hover:text-white font-bold"
+            className="w-4 h-5 text-[11px] text-slate-400 hover:text-white font-bold flex items-center justify-center rounded hover:bg-slate-800"
             title="Decrease Font Size"
           >
             -
           </button>
-          <span className="text-xs font-mono text-slate-300 w-4 text-center">{fontSize}</span>
+          <span className="text-[11px] font-mono text-slate-300 w-4 text-center">{fontSize}</span>
           <button
             type="button"
             onClick={() => setFontSize((s) => Math.min(24, s + 1))}
-            className="px-1.5 text-xs text-slate-400 hover:text-white font-bold"
+            className="w-4 h-5 text-[11px] text-slate-400 hover:text-white font-bold flex items-center justify-center rounded hover:bg-slate-800"
             title="Increase Font Size"
           >
             +
           </button>
         </div>
 
-        {/* Copy Button */}
+        {/* Reset Boilerplate */}
+        <button
+          type="button"
+          onClick={onResetActiveBoilerplate}
+          className="w-7.5 h-7.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs rounded-xl border border-slate-800 flex items-center justify-center transition-colors"
+          title="Reset active tab to default starter boilerplate"
+        >
+          <FontAwesomeIcon icon={faRotateLeft} className="text-[10px]" />
+        </button>
+
+        {/* Copy Code */}
         <button
           type="button"
           onClick={onCopyCode}
-          className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl border border-slate-800 flex items-center space-x-1.5 transition-colors"
+          className="h-7.5 px-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-800 flex items-center space-x-1 transition-colors"
           title="Copy Active Code"
         >
-          <FontAwesomeIcon icon={copied ? faCheck : faCopy} className={copied ? 'text-emerald-400' : ''} />
-          <span>{copied ? 'Copied' : 'Copy'}</span>
+          <FontAwesomeIcon icon={copied ? faCheck : faCopy} className={`text-[10px] ${copied ? 'text-emerald-400' : ''}`} />
+          <span className="text-[11px]">{copied ? 'Copied' : 'Copy'}</span>
         </button>
 
         {/* Fullscreen Toggle */}
         <button
           type="button"
           onClick={onToggleFullScreen}
-          className="p-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-800 transition-colors"
-          title={isFullScreen ? 'Exit Fullscreen' : 'Fullscreen Editor'}
+          className="w-7.5 h-7.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs rounded-xl border border-slate-800 flex items-center justify-center transition-colors"
+          title={isFullScreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen Editor'}
         >
-          <FontAwesomeIcon icon={isFullScreen ? faCompress : faExpand} />
+          <FontAwesomeIcon icon={isFullScreen ? faCompress : faExpand} className="text-[10px]" />
         </button>
       </div>
     </div>
   );
 }
+

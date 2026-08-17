@@ -64,7 +64,6 @@ export default function TeacherTaskEditPage() {
   const [allowAutocomplete, setAllowAutocomplete] = useState(true);
   const [allowMultiFile, setAllowMultiFile] = useState(false);
   const [testCases, setTestCases] = useState<TestCaseItem[]>([]);
-  const [testFilter, setTestFilter] = useState<'ALL' | 'SAMPLE' | 'PRETEST' | 'SYSTEM'>('ALL');
 
   // Multi-Role IDE states
   const [solutionCode, setSolutionCode] = useState('');
@@ -108,7 +107,11 @@ export default function TeacherTaskEditPage() {
         if (Array.isArray(task.testCases)) {
           setTestCases(
             task.testCases.map((tc: any, idx: number) => {
-              const cat: TestCaseCategory = tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE');
+              const cat: TestCaseCategory =
+                tc.testType ||
+                (workbenchMeta.testTypes?.[tc.id] as TestCaseCategory) ||
+                (workbenchMeta.testTypes?.[idx] as TestCaseCategory) ||
+                (tc.isHidden ? 'PRETEST' : 'SAMPLE');
               return {
                 id: tc.id,
                 inputData: tc.inputData || '',
@@ -163,40 +166,6 @@ export default function TeacherTaskEditPage() {
         .catch(() => {});
     }
   }, [courseId]);
-
-  const handleAddTestCase = (defaultCategory: TestCaseCategory = 'PRETEST') => {
-    setTestCases([
-      ...testCases,
-      {
-        id: Date.now(),
-        inputData: '',
-        expectedOutput: '',
-        points: 10,
-        isHidden: defaultCategory !== 'SAMPLE',
-        testType: defaultCategory,
-        order: testCases.length,
-      },
-    ]);
-  };
-
-  const handleRemoveTestCase = (index: number) => {
-    setTestCases(testCases.filter((_, i) => i !== index));
-  };
-
-  const handleUpdateTestCase = (index: number, field: keyof TestCaseItem, value: any) => {
-    const updated = [...testCases];
-    if (field === 'testType') {
-      const cat = value as TestCaseCategory;
-      updated[index] = {
-        ...updated[index],
-        testType: cat,
-        isHidden: cat !== 'SAMPLE',
-      };
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
-    }
-    setTestCases(updated);
-  };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -282,6 +251,13 @@ export default function TeacherTaskEditPage() {
 
     setIsSaving(true);
     try {
+      const testTypesMap: Record<number, string> = {};
+      testCases.forEach((tc, idx) => {
+        const cat = tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE');
+        testTypesMap[idx] = cat;
+        if (tc.id) testTypesMap[Number(tc.id)] = cat;
+      });
+
       const finalDescription = serializeTaskWorkbenchMetadata(description.trim(), {
         solutionCode,
         generatorCode,
@@ -289,6 +265,7 @@ export default function TeacherTaskEditPage() {
         checkerConfig,
         timeLimitMs,
         memoryLimitMb,
+        testTypes: testTypesMap,
       });
 
       const payload: any = {
@@ -626,204 +603,6 @@ export default function TeacherTaskEditPage() {
             testCases={testCases}
             onTestCasesChange={setTestCases}
           />
-        </div>
-
-        {/* Full-Width Evaluation Test Cases Suite Table & Manager */}
-        <div className="glass-panel p-6 md:p-8 rounded-3xl border border-slate-800 space-y-6 shadow-2xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-            <div>
-              <div className="flex items-center space-x-2.5 flex-wrap">
-                <h3 className="text-base font-extrabold text-white flex items-center space-x-2">
-                  <FontAwesomeIcon icon={faVial} className="text-emerald-400" />
-                  <span>Evaluation Test Cases Suite</span>
-                </h3>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  {testCases.length} Cases ({testCases.reduce((acc, t) => acc + (Number(t.points) || 0), 0)} pts)
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                  ⏱️ {timeLimitMs / 1000}s • 💾 {memoryLimitMb} MB
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Configure Samples (public in statement), Pretests (hidden input, runnable by students), and System Tests (final judge only).
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-2 flex-wrap">
-              {/* Category Filter Pills */}
-              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setTestFilter('ALL')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                    testFilter === 'ALL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  All ({testCases.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTestFilter('SAMPLE')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                    testFilter === 'SAMPLE' ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40' : 'text-emerald-400 hover:text-emerald-300'
-                  }`}
-                >
-                  🟢 Samples ({testCases.filter((t) => (t.testType || (!t.isHidden ? 'SAMPLE' : 'PRETEST')) === 'SAMPLE').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTestFilter('PRETEST')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                    testFilter === 'PRETEST' ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40' : 'text-amber-400 hover:text-amber-300'
-                  }`}
-                >
-                  🟡 Pretests ({testCases.filter((t) => (t.testType || (t.isHidden ? 'PRETEST' : 'SAMPLE')) === 'PRETEST').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTestFilter('SYSTEM')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                    testFilter === 'SYSTEM' ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40' : 'text-purple-400 hover:text-purple-300'
-                  }`}
-                >
-                  🟣 System ({testCases.filter((t) => t.testType === 'SYSTEM').length})
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleAddTestCase('PRETEST')}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-lg shadow-emerald-600/30 transition-all"
-              >
-                <FontAwesomeIcon icon={faPlus} />
-                <span>Add Test Case</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Test Case Cards */}
-          {testCases.length === 0 ? (
-            <div className="p-8 rounded-2xl border border-dashed border-slate-800 text-center space-y-2">
-              <FontAwesomeIcon icon={faVial} className="text-3xl text-slate-600" />
-              <p className="text-xs font-bold text-slate-300">No test cases added yet</p>
-              <p className="text-[11px] text-slate-500">
-                Click "Add Test Case" above or use the "TestCase Maker Script" in the IDE to generate cases automatically.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {testCases
-                .map((tc, realIndex) => ({ tc, realIndex }))
-                .filter(({ tc }) => testFilter === 'ALL' || (tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE')) === testFilter)
-                .map(({ tc, realIndex }) => {
-                  const currentCat: TestCaseCategory = tc.testType || (tc.isHidden ? 'PRETEST' : 'SAMPLE');
-                  return (
-                    <div
-                      key={tc.id || realIndex}
-                      className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800/90 space-y-4"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center space-x-3">
-                          <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold font-mono">
-                            #{realIndex + 1}
-                          </span>
-                          <span className="text-xs font-bold text-white">Test Case #{realIndex + 1}</span>
-
-                          {/* 3-Way Category Selector */}
-                          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[11px]">
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateTestCase(realIndex, 'testType', 'SAMPLE')}
-                              className={`px-2 py-0.5 rounded font-bold transition-colors ${
-                                currentCat === 'SAMPLE'
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              🟢 Sample (Public)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateTestCase(realIndex, 'testType', 'PRETEST')}
-                              className={`px-2 py-0.5 rounded font-bold transition-colors ${
-                                currentCat === 'PRETEST'
-                                  ? 'bg-amber-600 text-white'
-                                  : 'text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              🟡 Pretest (Runnable)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateTestCase(realIndex, 'testType', 'SYSTEM')}
-                              className={`px-2 py-0.5 rounded font-bold transition-colors ${
-                                currentCat === 'SYSTEM'
-                                  ? 'bg-purple-600 text-white'
-                                  : 'text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              🟣 System Test (Judge Only)
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-3">
-                          {/* Points */}
-                          <div className="flex items-center space-x-1">
-                            <input
-                              type="number"
-                              min="1"
-                              value={tc.points}
-                              onChange={(e) => handleUpdateTestCase(realIndex, 'points', Number(e.target.value))}
-                              className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white text-center font-bold"
-                            />
-                            <span className="text-xs text-slate-500 font-semibold">pts</span>
-                          </div>
-
-                          {/* Delete */}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTestCase(realIndex)}
-                            className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors text-xs"
-                          >
-                            <FontAwesomeIcon icon={faTrash} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                            Standard Input (stdin)
-                          </label>
-                          <textarea
-                            rows={3}
-                            value={tc.inputData}
-                            onChange={(e) => handleUpdateTestCase(realIndex, 'inputData', e.target.value)}
-                            placeholder="Leave empty if no standard input is required..."
-                            className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 outline-none"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                            Expected Output (stdout) <span className="text-rose-400">*</span>
-                          </label>
-                          <textarea
-                            rows={3}
-                            required
-                            value={tc.expectedOutput}
-                            onChange={(e) => handleUpdateTestCase(realIndex, 'expectedOutput', e.target.value)}
-                            placeholder="Exact expected standard output..."
-                            className="w-full bg-[#0e131f] border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-400 outline-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          )}
         </div>
       </form>
     </div>

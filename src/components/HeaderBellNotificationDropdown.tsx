@@ -22,6 +22,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 interface NotificationItem {
   id: string;
+  userId?: string | null;
   title: string;
   body?: string | null;
   link?: string | null;
@@ -90,7 +91,12 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
       
       if (res.ok) {
         const json = await res.json();
-        setNotifications(json.data || []);
+        const rawData: NotificationItem[] = json.data || [];
+        // Ensure privacy: only show global notifications or notifications matching this user's ID
+        const filtered = user?.id
+          ? rawData.filter((n) => !n.userId || n.userId === user.id)
+          : rawData.filter((n) => !n.userId);
+        setNotifications(filtered);
         setUnreadCount(json.meta?.unreadCount || 0);
       }
       
@@ -115,7 +121,12 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
         if (parsed.type === 'NOTIFICATION' && parsed.payload) {
           const newNotif: NotificationItem = parsed.payload;
 
-          setNotifications((prev) => [newNotif, ...prev.slice(0, 15)]);
+          // Strictly ensure notification is either global (userId is null) OR matches the current user
+          if (newNotif.userId && (!user?.id || newNotif.userId !== user.id)) {
+            return;
+          }
+
+          setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id).slice(0, 14)]);
           setUnreadCount((prev) => prev + 1);
 
           // 🔔 Play notification sound
@@ -137,7 +148,7 @@ export const HeaderBellNotificationDropdown: React.FC = () => {
     return () => {
       eventSource.close();
     };
-  }, [API_URL, fetchNotifications, playNotificationSound]);
+  }, [API_URL, fetchNotifications, playNotificationSound, user?.id]);
 
   // Close dropdown on click outside
   useEffect(() => {

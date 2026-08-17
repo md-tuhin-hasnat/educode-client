@@ -12,6 +12,8 @@ import {
   faSpinner,
   faSliders,
   faWandMagicSparkles,
+  faCode,
+  faPlay,
 } from '@fortawesome/free-solid-svg-icons';
 import { TestCaseItem, TestCaseCategory, TestSuiteResultItem } from './types';
 
@@ -24,6 +26,9 @@ interface TestSuiteMatrixTabProps {
   isEvaluatingSuite: boolean;
   onEvaluateTestSuite: () => void;
   onOpenBatchDrawer: () => void;
+  onGenerateOutputsFromSolution?: () => void;
+  isGeneratingOutputs?: boolean;
+  onGenerateSingleOutputFromSolution?: (index: number) => void;
 }
 
 export function TestSuiteMatrixTab({
@@ -35,6 +40,9 @@ export function TestSuiteMatrixTab({
   isEvaluatingSuite,
   onEvaluateTestSuite,
   onOpenBatchDrawer,
+  onGenerateOutputsFromSolution,
+  isGeneratingOutputs,
+  onGenerateSingleOutputFromSolution,
 }: TestSuiteMatrixTabProps) {
   const sampleCount = testCases.filter((t) => (t.testType || (!t.isHidden ? 'SAMPLE' : 'PRETEST')) === 'SAMPLE').length;
   const pretestCount = testCases.filter((t) => (t.testType || (t.isHidden ? 'PRETEST' : 'SAMPLE')) === 'PRETEST').length;
@@ -133,7 +141,23 @@ export function TestSuiteMatrixTab({
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onGenerateOutputsFromSolution && (
+            <button
+              type="button"
+              onClick={onGenerateOutputsFromSolution}
+              disabled={isGeneratingOutputs || testCases.length === 0}
+              className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-colors disabled:opacity-50 shadow-sm"
+              title="Run Reference Solution on all test cases to generate expected outputs automatically"
+            >
+              <FontAwesomeIcon
+                icon={isGeneratingOutputs ? faSpinner : faCode}
+                className={isGeneratingOutputs ? 'animate-spin' : ''}
+              />
+              <span>{isGeneratingOutputs ? 'Generating Outputs...' : 'Generate Outputs from Solution'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenBatchDrawer}
@@ -271,28 +295,41 @@ export function TestSuiteMatrixTab({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
                       Input (stdin):
                     </label>
                     <textarea
-                      rows={2}
+                      rows={4}
                       value={tc.inputData}
                       onChange={(e) =>
                         handleUpdateTestCase(originalIndex, { inputData: e.target.value })
                       }
                       placeholder="e.g. 5&#10;1 2 3 4 5"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-slate-600"
+                      className="w-full min-h-[90px] bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-mono text-slate-200 outline-none focus:border-indigo-500/60 transition-colors resize-y"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Expected Output (stdout):
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Expected Output (stdout):
+                      </label>
+                      {onGenerateSingleOutputFromSolution && (
+                        <button
+                          type="button"
+                          onClick={() => onGenerateSingleOutputFromSolution(originalIndex)}
+                          className="text-[10px] text-emerald-400 hover:text-emerald-300 font-sans flex items-center space-x-1 transition-colors"
+                          title="Generate expected output for this test case from Reference Solution"
+                        >
+                          <FontAwesomeIcon icon={faPlay} className="text-[8px]" />
+                          <span>From Solution</span>
+                        </button>
+                      )}
+                    </div>
                     <textarea
-                      rows={2}
+                      rows={4}
                       value={tc.expectedOutput}
                       onChange={(e) =>
                         handleUpdateTestCase(originalIndex, {
@@ -300,7 +337,7 @@ export function TestSuiteMatrixTab({
                         })
                       }
                       placeholder="e.g. 15"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-emerald-300 outline-none focus:border-slate-600"
+                      className="w-full min-h-[90px] bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-mono text-emerald-300 outline-none focus:border-emerald-500/60 transition-colors resize-y"
                     />
                   </div>
                 </div>

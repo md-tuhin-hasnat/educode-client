@@ -35,6 +35,9 @@ import {
   faWindowMaximize,
   faWindowRestore,
   faArrowLeft,
+  faLock,
+  faUnlock,
+  faSpinner,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import IDESettingsModal, { DEFAULT_SETTINGS, IDESettings } from '@/components/IDESettingsModal';
@@ -51,6 +54,7 @@ import {
 } from '@/utils/testCaseRunner';
 import { parseCheckerMetadata, parseTaskWorkbenchMetadata } from '@/utils/testCaseChecker';
 import TestCaseRunnerPanel from '@/components/TestCaseRunnerPanel';
+import { LiveTestLogsView } from '@/components/test-runner/LiveTestLogsView';
 import { validateCodeSyntax, parseCompilerErrors, SyntaxMarker } from '@/utils/syntaxValidator';
 import type { Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
@@ -100,6 +104,18 @@ export default function StudentSolvePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [taskSubmissions, setTaskSubmissions] = useState<
+    Record<
+      string,
+      {
+        id: string;
+        status: string;
+        allowResubmit: boolean;
+        attemptCount: number;
+        submittedAt?: string;
+      }
+    >
+  >({});
 
   // Auto-redirect if id is direct and taskId parameter is present
   useEffect(() => {
@@ -111,15 +127,16 @@ export default function StudentSolvePage() {
 
   // State mapped by task ID
   const [workspaces, setWorkspaces] = useState<Record<string, TaskWorkspaceState>>({});
-  const [activeTab, setActiveTab] = useState<'problem' | 'files' | 'console' | 'testcases'>('problem');
+  const [activeTab, setActiveTab] = useState<'problem' | 'testcases'>('problem');
   const [isExecuting, setIsExecuting] = useState(false);
   const [testSummaries, setTestSummaries] = useState<Record<string, TestSuiteSummary>>({});
   const [isTesting, setIsTesting] = useState(false);
   
   const [isJavaPackageModalOpen, setIsJavaPackageModalOpen] = useState<boolean>(false);
 
-  // VS Code Integrated Terminal State
+  // VS Code Developer Bottom Dock State (Terminal, Console, Test Logs)
   const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(true);
+  const [bottomDockTab, setBottomDockTab] = useState<'terminal' | 'console' | 'logs'>('terminal');
   const [terminalHeight, setTerminalHeight] = useState<number>(240);
   const [isTerminalMaximized, setIsTerminalMaximized] = useState<boolean>(false);
   const [isTerminalResizing, setIsTerminalResizing] = useState<boolean>(false);
@@ -237,10 +254,38 @@ export default function StudentSolvePage() {
       });
       setWorkspaces(initialWorkspaces);
 
+      // Fetch student submissions for tasks
+      try {
+        const subRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/submissions/my-submissions`,
+          {
+            headers: { Authorization: `Bearer ${user?.token}` },
+          },
+        );
+        if (subRes.ok) {
+          const subList = await subRes.json();
+          if (Array.isArray(subList)) {
+            const map: Record<string, any> = {};
+            subList.forEach((s: any) => {
+              map[s.taskId] = {
+                id: s.id,
+                status: s.status,
+                allowResubmit: !!s.allowResubmit,
+                attemptCount: s.attemptCount || 1,
+                submittedAt: s.submittedAt,
+              };
+            });
+            setTaskSubmissions(map);
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       // Calculate time left
       if (data.startTime && data.durationMin) {
         const start = new Date(data.startTime).getTime();
-        const end = start + (data.durationMin * 60 * 1000);
+        const end = start + data.durationMin * 60 * 1000;
         const now = Date.now();
         const diff = Math.max(0, Math.floor((end - now) / 1000));
         setTimeLeft(diff);
@@ -341,32 +386,78 @@ export default function StudentSolvePage() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const currentTask = assessment?.tasks?.[currentTaskIndex];
+  const isLastTask = assessment?.tasks
+    ? currentTaskIndex === assessment.tasks.length - 1
+    : false;
+  const currentWorkspace = currentTask
+    ? workspaces[currentTask.id]
+    : undefined;
+
   const handleSubmitExam = async () => {
-    if (!user?.token) return;
-    if (timeLeft !== null && timeLeft > 0) {
-      if (!confirm('Are you sure you want to submit your exam? You cannot undo this.')) {
-        return;
-      }
+    if (!user?.token || !currentTask || !currentWorkspace) return;
+
+    const currentSub = taskSubmissions[currentTask.id];
+    const isLocked =
+      currentSub?.status === 'submitted' && !currentSub?.allowResubmit;
+
+    if (isLocked) {
+      alert(
+        'You have already submitted this task. Only one submission is permitted unless your instructor grants re-submission access.',
+      );
+      return;
     }
-    
+
+    if (
+      !confirm(
+        `Are you sure you want to submit your solution for "${currentTask.title}"? Each task can only be submitted once unless unlocked by your teacher.`,
+      )
+    ) {
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Logic to submit solutions would go here
-      // e.g. extract code from workspaces and submit
-      
-      alert('Exam submitted successfully!');
-      router.push('/student/assessments');
-    } catch (err) {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/submissions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify({
+            taskId: currentTask.id,
+            sourceCode: currentWorkspace.code,
+            language: currentWorkspace.language.toUpperCase(),
+          }),
+        },
+      );
+
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData?.message || 'Submission failed');
+      }
+
+      setTaskSubmissions((prev) => ({
+        ...prev,
+        [currentTask.id]: {
+          id: resData.id || 'sub-id',
+          status: 'submitted',
+          allowResubmit: false,
+          attemptCount: (currentSub?.attemptCount || 0) + 1,
+          submittedAt: new Date().toISOString(),
+        },
+      }));
+
+      alert('Task solution submitted successfully!');
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to submit exam');
+      alert(err.message || 'Failed to submit task solution');
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const currentTask = assessment?.tasks?.[currentTaskIndex];
-  const isLastTask = assessment?.tasks ? currentTaskIndex === assessment.tasks.length - 1 : false;
-  const currentWorkspace = currentTask ? workspaces[currentTask.id] : undefined;
 
   const updateCurrentWorkspace = (updates: Partial<TaskWorkspaceState>) => {
     if (!currentTask) return;
@@ -726,6 +817,7 @@ export default function StudentSolvePage() {
     if (!currentWorkspace) return;
     setIsExecuting(true);
     setIsTerminalOpen(true);
+    setBottomDockTab('console');
 
     try {
       if (typeof window !== 'undefined' && (window as any).educode?.pty) {
@@ -735,6 +827,8 @@ export default function StudentSolvePage() {
           files: currentWorkspace.workspaceFiles,
           activeFilePath: currentWorkspace.activeFilePath,
         });
+      } else {
+        await handleRunConsoleCode(currentWorkspace.customInput);
       }
     } catch (err) {
       console.error('PTY Code Runner error:', err);
@@ -746,6 +840,8 @@ export default function StudentSolvePage() {
   const handleRunConsoleCode = async (stdinText?: string) => {
     if (!currentWorkspace) return;
     setIsExecuting(true);
+    setIsTerminalOpen(true);
+    setBottomDockTab('console');
     const activeInput = typeof stdinText === 'string' ? stdinText : currentWorkspace.customInput;
 
     try {
@@ -808,6 +904,8 @@ export default function StudentSolvePage() {
     if (!currentTask || !currentWorkspace || isTesting) return;
     setIsTesting(true);
     setActiveTab('testcases');
+    setIsTerminalOpen(true);
+    setBottomDockTab('logs');
     setIsFullFocus(false);
 
     const taskTestCases: TestCaseInput[] = (currentTask.testCases && currentTask.testCases.length > 0)
@@ -877,13 +975,13 @@ export default function StudentSolvePage() {
     currentTask.testCases = [...currentList, tc];
   };
 
-  if (isLoading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading Exam...</div>;
-  if (error) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-red-500">{error}</div>;
-  if (!assessment?.tasks || assessment.tasks.length === 0) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">No tasks found for this exam.</div>;
+  if (isLoading) return <div className="h-full flex-1 bg-gray-900 flex items-center justify-center text-white">Loading Exam...</div>;
+  if (error) return <div className="h-full flex-1 bg-gray-900 flex items-center justify-center text-red-500">{error}</div>;
+  if (!assessment?.tasks || assessment.tasks.length === 0) return <div className="h-full flex-1 bg-gray-900 flex items-center justify-center text-white">No tasks found for this exam.</div>;
   if (!currentWorkspace || !currentTask) return null; // Wait until workspace initializes
 
   return (
-    <div className="h-screen flex flex-col bg-slate-950 overflow-hidden select-none">
+    <div className="h-full flex-1 flex flex-col bg-slate-950 overflow-hidden select-none min-h-0">
       {/* Top Space-Optimized Header Bar */}
       <div className="h-12 bg-[#0b0f19] border-b border-slate-800/80 px-3 flex items-center justify-between shrink-0 z-20 gap-3">
         {/* Left: Exit/Classroom Link + Exam Info */}
@@ -958,19 +1056,66 @@ export default function StudentSolvePage() {
             <FontAwesomeIcon icon={faFloppyDisk} className="text-[11px] text-emerald-400" />
           </button>
 
-          {/* Terminal Toggle Button */}
-          <button
-            onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-            className={`px-2 py-1 h-7 rounded-md text-xs font-medium flex items-center space-x-1 border transition-all ${
-              isTerminalOpen
-                ? 'bg-slate-800 text-white border-slate-600 shadow-sm'
-                : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
-            }`}
-            title="Toggle Integrated Terminal"
-          >
-            <FontAwesomeIcon icon={faTerminal} className="text-[10px] text-emerald-400" />
-            <span className="hidden lg:inline text-[11px]">Terminal</span>
-          </button>
+          {/* Bottom Dock Quick Selectors */}
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 space-x-0.5">
+            <button
+              onClick={() => {
+                if (isTerminalOpen && bottomDockTab === 'terminal') {
+                  setIsTerminalOpen(false);
+                } else {
+                  setIsTerminalOpen(true);
+                  setBottomDockTab('terminal');
+                }
+              }}
+              className={`px-2 py-1 h-6 rounded text-[11px] font-medium flex items-center space-x-1 transition-colors ${
+                isTerminalOpen && bottomDockTab === 'terminal'
+                  ? 'bg-slate-800 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Toggle Terminal Drawer (bash)"
+            >
+              <FontAwesomeIcon icon={faTerminal} className="text-[10px] text-emerald-400" />
+              <span className="hidden xl:inline">Terminal</span>
+            </button>
+            <button
+              onClick={() => {
+                if (isTerminalOpen && bottomDockTab === 'console') {
+                  setIsTerminalOpen(false);
+                } else {
+                  setIsTerminalOpen(true);
+                  setBottomDockTab('console');
+                }
+              }}
+              className={`px-2 py-1 h-6 rounded text-[11px] font-medium flex items-center space-x-1 transition-colors ${
+                isTerminalOpen && bottomDockTab === 'console'
+                  ? 'bg-slate-800 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Toggle Console / Process Output"
+            >
+              <FontAwesomeIcon icon={faLaptopCode} className="text-[10px] text-brand-400" />
+              <span className="hidden xl:inline">Console</span>
+            </button>
+            <button
+              onClick={() => {
+                if (isTerminalOpen && bottomDockTab === 'logs') {
+                  setIsTerminalOpen(false);
+                } else {
+                  setIsTerminalOpen(true);
+                  setBottomDockTab('logs');
+                }
+              }}
+              className={`px-2 py-1 h-6 rounded text-[11px] font-medium flex items-center space-x-1 transition-colors ${
+                isTerminalOpen && bottomDockTab === 'logs'
+                  ? 'bg-slate-800 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Toggle Live Test Logs"
+            >
+              <FontAwesomeIcon icon={faFlask} className="text-[10px] text-indigo-400" />
+              <span className="hidden xl:inline">Test Logs</span>
+            </button>
+          </div>
 
           {/* Focus Mode Button */}
           <button
@@ -1023,27 +1168,67 @@ export default function StudentSolvePage() {
           </button>
 
           {/* Submit Exam Button */}
-          <button
-            onClick={handleSubmitExam}
-            disabled={isSubmitting}
-            className="px-3 py-1 h-7 rounded-md bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-brand-600/25 flex items-center space-x-1.5 transition-all disabled:opacity-50"
-            title="Submit exam solution"
-          >
-            <FontAwesomeIcon icon={faCheck} className="text-[10px]" />
-            <span>Submit</span>
-          </button>
+          {(() => {
+            const currentSub = currentTask
+              ? taskSubmissions[currentTask.id]
+              : undefined;
+            const isLocked =
+              currentSub?.status === 'submitted' && !currentSub?.allowResubmit;
+            const canResubmit = !!currentSub?.allowResubmit;
+
+            return (
+              <button
+                onClick={handleSubmitExam}
+                disabled={isSubmitting || isLocked}
+                className={`px-3 py-1 h-7 rounded-md text-white text-xs font-bold shadow-md flex items-center space-x-1.5 transition-all ${
+                  isLocked
+                    ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-90'
+                    : canResubmit
+                    ? 'bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-500 hover:to-teal-500 shadow-indigo-600/25'
+                    : 'bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 shadow-brand-600/25'
+                } disabled:opacity-75`}
+                title={
+                  isLocked
+                    ? 'You have already submitted this task. Only one submission is permitted unless your instructor grants re-submission access.'
+                    : canResubmit
+                    ? 'Instructor has granted re-submission permission'
+                    : 'Submit task solution'
+                }
+              >
+                <FontAwesomeIcon
+                  icon={
+                    isSubmitting
+                      ? faSpinner
+                      : isLocked
+                      ? faLock
+                      : canResubmit
+                      ? faUnlock
+                      : faCheck
+                  }
+                  className={`text-[10px] ${isSubmitting ? 'animate-spin' : ''}`}
+                />
+                <span>
+                  {isLocked
+                    ? 'Submitted (Locked)'
+                    : canResubmit
+                    ? 'Re-submit'
+                    : 'Submit'}
+                </span>
+              </button>
+            );
+          })()}
         </div>
       </div>
 
-      <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
+      <div ref={containerRef} className="flex-1 flex overflow-hidden relative min-h-0">
         {!isFullFocus && (
           <div
             style={{ width: `${leftWidthPercent}%` }}
-            className={`border-r border-slate-800 flex flex-col bg-slate-900 shrink-0 ${
+            className={`border-r border-slate-800 flex flex-col bg-slate-900 shrink-0 h-full overflow-hidden min-h-0 ${
               isDragging ? 'transition-none select-none' : 'transition-all duration-150'
             }`}
           >
-            <div className="p-3 border-b border-slate-800 flex justify-between items-center text-slate-300 bg-slate-900/80">
+            <div className="p-3 border-b border-slate-800 flex justify-between items-center text-slate-300 bg-slate-900/80 shrink-0">
               <button 
                 onClick={() => setCurrentTaskIndex(prev => Math.max(0, prev - 1))}
                 disabled={currentTaskIndex === 0}
@@ -1063,10 +1248,10 @@ export default function StudentSolvePage() {
               </button>
             </div>
 
-            <div className="flex border-b border-slate-800 bg-slate-900 text-xs font-semibold text-slate-400">
+            <div className="flex border-b border-slate-800 bg-slate-900 text-xs font-semibold text-slate-400 shrink-0">
               <button
                 onClick={() => setActiveTab('problem')}
-                className={`px-3.5 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
+                className={`px-4 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
                   activeTab === 'problem'
                     ? 'border-brand-500 text-white bg-slate-800/50'
                     : 'border-transparent hover:text-slate-200'
@@ -1078,7 +1263,7 @@ export default function StudentSolvePage() {
 
               <button
                 onClick={() => setActiveTab('testcases')}
-                className={`px-3.5 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
+                className={`px-4 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
                   activeTab === 'testcases'
                     ? 'border-brand-500 text-white bg-slate-800/50 font-bold'
                     : 'border-transparent hover:text-slate-200'
@@ -1096,28 +1281,11 @@ export default function StudentSolvePage() {
                   </span>
                 )}
               </button>
-
-              <button
-                onClick={() => setActiveTab('console')}
-                className={`px-3.5 py-2.5 border-b-2 flex items-center space-x-1.5 transition-all ${
-                  activeTab === 'console'
-                    ? 'border-emerald-500 text-white bg-slate-800/50'
-                    : 'border-transparent hover:text-slate-200'
-                }`}
-              >
-                <FontAwesomeIcon icon={faLaptopCode} />
-                <span>Console</span>
-                {currentWorkspace.consoleLogs.length > 0 && (
-                  <span className="px-1.5 py-0.2 text-[9px] rounded-full bg-emerald-500/30 text-emerald-300 font-bold border border-emerald-500/40">
-                    {currentWorkspace.consoleLogs.length}
-                  </span>
-                )}
-              </button>
             </div>
 
-            <div className="flex-1 p-5 overflow-y-auto space-y-4 text-xs text-slate-300 flex flex-col select-text">
+            <div className="flex-1 p-5 overflow-y-auto space-y-4 text-xs text-slate-300 flex flex-col select-text min-h-0">
               {activeTab === 'testcases' ? (
-                <div className="flex-1 -m-5 flex flex-col h-full overflow-hidden">
+                <div className="flex-1 -m-5 flex flex-col h-full overflow-hidden min-h-0">
                   <TestCaseRunnerPanel
                     testCases={currentTask.testCases && currentTask.testCases.length > 0 ? currentTask.testCases : [
                       { id: '1', order: 1, inputData: '5\n1 2 3 4 5', expectedOutput: '5 4 3 2 1', points: 25, isHidden: false, testType: 'SAMPLE' },
@@ -1133,9 +1301,10 @@ export default function StudentSolvePage() {
                     checkerConfig={parseTaskWorkbenchMetadata(currentTask.description).checkerConfig || parseCheckerMetadata(currentTask.description)}
                     timeLimitMs={currentTask.timeLimitMs || parseTaskWorkbenchMetadata(currentTask.description).timeLimitMs || 1000}
                     memoryLimitMb={currentTask.memoryLimitMb || parseTaskWorkbenchMetadata(currentTask.description).memoryLimitMb || 256}
+                    showLogs={false}
                   />
                 </div>
-              ) : activeTab === 'problem' ? (
+              ) : (
                 <div className="space-y-4 prose prose-invert max-w-none">
                   <h2 className="text-lg font-bold text-white m-0">{currentTask.title}</h2>
                   <div className="flex flex-wrap gap-2 text-[11px]">
@@ -1154,6 +1323,32 @@ export default function StudentSolvePage() {
                     </span>
                   </div>
 
+                  {/* Single-submission / Re-submission Alert Banner */}
+                  {taskSubmissions[currentTask.id]?.status === 'submitted' &&
+                    !taskSubmissions[currentTask.id]?.allowResubmit && (
+                      <div className="not-prose p-3 bg-slate-900/90 border border-slate-700/80 rounded-2xl text-xs flex items-start space-x-2.5 text-slate-300">
+                        <FontAwesomeIcon icon={faLock} className="text-amber-400 text-sm mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-amber-300">Single Submission Rule Active</p>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            You have already submitted this task (Attempt #{taskSubmissions[currentTask.id].attemptCount || 1}). Each student can only submit once. If you need to re-submit, please contact your instructor to grant re-submission access.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                  {taskSubmissions[currentTask.id]?.allowResubmit && (
+                    <div className="not-prose p-3 bg-indigo-950/60 border border-indigo-500/40 rounded-2xl text-xs flex items-start space-x-2.5 text-indigo-200">
+                      <FontAwesomeIcon icon={faUnlock} className="text-indigo-400 text-sm mt-0.5 animate-pulse" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-indigo-300">Re-submission Access Granted</p>
+                        <p className="text-[11px] text-indigo-200/80 leading-relaxed">
+                          Your instructor has granted you permission to submit an updated solution for this problem.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-4">
                     {currentTask.description ? (
                       <PostContentRenderer
@@ -1166,104 +1361,18 @@ export default function StudentSolvePage() {
                     )}
                   </div>
                 </div>
-              ) : (
-                <div className="flex-1 flex flex-col space-y-4 font-mono text-xs">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                    <div className="flex items-center space-x-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                      <span className="font-bold text-white uppercase tracking-wider text-[11px]">Execution Console</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {currentWorkspace.consoleLogs.length > 0 && (
-                        <button
-                          onClick={() => updateCurrentWorkspace({ consoleLogs: [] })}
-                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] flex items-center space-x-1"
-                        >
-                          <FontAwesomeIcon icon={faTrash} className="text-[10px] text-rose-400" />
-                          <span>Clear Logs</span>
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleRunConsoleCode(currentWorkspace.customInput)}
-                        disabled={isExecuting}
-                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] flex items-center space-x-1 disabled:opacity-50"
-                      >
-                        <FontAwesomeIcon icon={faPlay} className="text-[10px]" />
-                        <span>Run Code</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 flex flex-col space-y-3">
-                    <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-                          <FontAwesomeIcon icon={faKeyboard} className="text-blue-400" />
-                          <span>Standard Input</span>
-                        </label>
-                      </div>
-                      <textarea
-                        value={currentWorkspace.customInput}
-                        onChange={(e) => updateCurrentWorkspace({ customInput: e.target.value })}
-                        placeholder="Enter input here..."
-                        className="w-full h-20 p-2.5 bg-slate-900 border border-slate-800 rounded-lg text-tealAccent-300 font-mono text-xs focus:outline-none focus:border-blue-500 resize-none"
-                      />
-                    </div>
-
-                    <div className="flex-1 flex flex-col p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 min-h-[180px]">
-                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-900">
-                        <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-                          <FontAwesomeIcon icon={faTerminal} className="text-emerald-400" />
-                          <span>Output</span>
-                        </span>
-                        {currentWorkspace.executionOutput && (
-                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                            currentWorkspace.executionOutput.exitCode === 0 ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800' : 'bg-rose-950/80 text-rose-400 border border-rose-800'
-                          }`}>
-                            Exit {currentWorkspace.executionOutput.exitCode} • {currentWorkspace.executionOutput.timeMs}ms
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex-1 overflow-y-auto font-mono text-xs space-y-2 p-1">
-                        {isExecuting ? (
-                          <div className="flex items-center space-x-2 text-blue-400 animate-pulse py-4">
-                            <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                            <span>Executing...</span>
-                          </div>
-                        ) : currentWorkspace.executionOutput ? (
-                          <div className="space-y-2">
-                            {currentWorkspace.executionOutput.stdout && (
-                              <div className="text-tealAccent-300 whitespace-pre-wrap bg-slate-900/60 p-2.5 rounded border border-slate-900">
-                                {currentWorkspace.executionOutput.stdout}
-                              </div>
-                            )}
-                            {currentWorkspace.executionOutput.stderr && (
-                              <div className="text-rose-400 whitespace-pre-wrap bg-rose-950/40 p-2.5 rounded border border-rose-900/50">
-                                {currentWorkspace.executionOutput.stderr}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="h-full flex items-center justify-center text-slate-600 text-[11px] italic py-8">
-                            No active output.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
               )}
             </div>
           </div>
         )}
 
+        {/* Draggable Resizer Bar */}
         {!isFullFocus && (
           <>
             <div
               onMouseDown={handleMouseDown}
-              className={`w-1.5 hover:w-2 bg-slate-800 hover:bg-blue-500 cursor-col-resize z-30 transition-all flex items-center justify-center ${
-                isDragging ? 'bg-blue-500 w-2' : ''
+              className={`w-1.5 hover:w-2 bg-slate-800 hover:bg-brand-500 cursor-col-resize z-30 transition-all flex items-center justify-center ${
+                isDragging ? 'bg-brand-500 w-2' : ''
               }`}
             >
               <FontAwesomeIcon icon={faGripVertical} className="text-[8px] text-slate-600 hover:text-white" />
@@ -1278,7 +1387,8 @@ export default function StudentSolvePage() {
           </>
         )}
 
-        <div className="flex-1 flex bg-slate-950 select-text relative overflow-hidden">
+        {/* Right Side: Multi-Tab Editor + Bottom Dock */}
+        <div className="flex-1 flex bg-slate-950 select-text relative overflow-hidden min-h-0">
           <FileExplorer
             files={currentWorkspace.workspaceFiles}
             activeFilePath={currentWorkspace.activeFilePath}
@@ -1291,7 +1401,7 @@ export default function StudentSolvePage() {
             onOpenJavaPackageModal={() => setIsJavaPackageModalOpen(true)}
           />
 
-          <div className="flex-1 flex flex-col min-w-0 bg-slate-950 relative overflow-hidden">
+          <div className="flex-1 flex flex-col min-w-0 bg-slate-950 relative overflow-hidden min-h-0">
             <div className="h-9 bg-[#111827] border-b border-slate-800 flex items-center justify-between shrink-0 select-none overflow-x-auto">
               <div className="flex items-center h-full overflow-x-auto no-scrollbar">
                 {currentWorkspace.openTabPaths.map((filePath) => {
@@ -1303,13 +1413,13 @@ export default function StudentSolvePage() {
                       onClick={() => handleSelectFile(filePath)}
                       className={`h-full px-3 flex items-center space-x-2 text-xs font-mono border-r border-slate-800 cursor-pointer transition-colors shrink-0 ${
                         isActive
-                          ? 'bg-slate-900 text-white border-t-2 border-t-blue-500 font-semibold'
+                          ? 'bg-slate-900 text-white border-t-2 border-t-brand-500 font-semibold'
                           : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                       }`}
                     >
                       <FontAwesomeIcon
                         icon={filePath.endsWith('.java') ? faCode : faFileCode}
-                        className={isActive ? 'text-blue-400' : 'text-slate-500'}
+                        className={isActive ? 'text-brand-400' : 'text-slate-500'}
                       />
                       <span>{fileName}</span>
                       <button
@@ -1404,62 +1514,210 @@ export default function StudentSolvePage() {
               </div>
             )}
 
+            {/* VS Code Developer Bottom Dock (Terminal, Console Output, Test Logs) */}
             {isTerminalOpen && (
               <div
                 style={{ height: `${terminalHeight}px` }}
                 className="border-t border-slate-800 bg-[#0e131f] flex flex-col shrink-0 relative transition-[height] duration-75"
               >
-                {/* Enhanced 100% Height Resizing Handle with indicator */}
+                {/* Resizing Handle with indicator */}
                 <div
                   onMouseDown={handleTerminalResizeStart}
                   onDoubleClick={toggleMaximizeTerminal}
                   className="h-2.5 w-full cursor-row-resize hover:bg-brand-500/50 active:bg-brand-500 transition-colors absolute -top-1 left-0 right-0 z-30 flex items-center justify-center group"
-                  title="Drag to resize up to 100% or double-click to toggle maximize"
+                  title="Drag to resize or double-click to toggle maximize"
                 >
                   <div className="w-12 h-1 rounded-full bg-slate-600 group-hover:bg-brand-400 group-active:bg-brand-400 transition-colors" />
                 </div>
 
+                {/* Dock Header with Tabs */}
                 <div 
-                  className="h-8 bg-[#131927] border-b border-slate-800/80 px-3 flex items-center justify-between text-xs shrink-0 select-none"
+                  className="h-8 bg-[#131927] border-b border-slate-800/80 px-2 flex items-center justify-between text-xs shrink-0 select-none"
                   onDoubleClick={toggleMaximizeTerminal}
                 >
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-1.5 text-slate-200 font-semibold">
+                  {/* Tabs: Terminal, Console, Test Logs */}
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => setBottomDockTab('terminal')}
+                      className={`px-3 py-1 rounded-t-md flex items-center space-x-1.5 text-xs font-semibold border-b-2 transition-all ${
+                        bottomDockTab === 'terminal'
+                          ? 'border-emerald-500 text-white bg-slate-900/90'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
                       <FontAwesomeIcon icon={faTerminal} className="text-emerald-400 text-xs" />
                       <span>TERMINAL</span>
-                    </div>
+                      <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">(bash)</span>
+                    </button>
+
+                    <button
+                      onClick={() => setBottomDockTab('console')}
+                      className={`px-3 py-1 rounded-t-md flex items-center space-x-1.5 text-xs font-semibold border-b-2 transition-all ${
+                        bottomDockTab === 'console'
+                          ? 'border-brand-500 text-white bg-slate-900/90'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <FontAwesomeIcon icon={faLaptopCode} className="text-brand-400 text-xs" />
+                      <span>CONSOLE</span>
+                      {currentWorkspace.executionOutput && (
+                        <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${
+                          currentWorkspace.executionOutput.exitCode === 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                          Exit {currentWorkspace.executionOutput.exitCode}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setBottomDockTab('logs')}
+                      className={`px-3 py-1 rounded-t-md flex items-center space-x-1.5 text-xs font-semibold border-b-2 transition-all ${
+                        bottomDockTab === 'logs'
+                          ? 'border-indigo-500 text-white bg-slate-900/90'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <FontAwesomeIcon icon={faFlask} className="text-indigo-400 text-xs" />
+                      <span>TEST LOGS</span>
+                      {testSummaries[currentTask.id] && (
+                        <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${
+                          testSummaries[currentTask.id].passedCount === testSummaries[currentTask.id].totalCount ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                          {testSummaries[currentTask.id].passedCount}/{testSummaries[currentTask.id].totalCount}
+                        </span>
+                      )}
+                    </button>
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => {
-                        if (typeof window !== 'undefined' && (window as any).educode?.pty) {
-                          (window as any).educode.pty.write('clear\n');
-                        }
-                      }}
-                      className="px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-white hover:bg-slate-800"
-                    >
-                      Clear
-                    </button>
-                    {/* Maximize to 100% / Restore Button */}
+                  {/* Controls: Clear, Maximize, Close */}
+                  <div className="flex items-center space-x-1">
+                    {bottomDockTab === 'terminal' && (
+                      <button
+                        onClick={() => {
+                          if (typeof window !== 'undefined' && (window as any).educode?.pty) {
+                            (window as any).educode.pty.write('clear\n');
+                          }
+                        }}
+                        title="Clear Terminal"
+                        className="px-2 py-0.5 rounded text-[11px] font-mono text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    {bottomDockTab === 'console' && (
+                      <button
+                        onClick={() => updateCurrentWorkspace({ consoleLogs: [], executionOutput: null })}
+                        title="Clear Console Output"
+                        className="px-2 py-0.5 rounded text-[11px] font-mono text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
                     <button
                       onClick={toggleMaximizeTerminal}
                       className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                      title={isTerminalMaximized ? "Restore Terminal Height" : "Maximize Terminal to 100%"}
+                      title={isTerminalMaximized ? "Restore Height" : "Maximize Height"}
                     >
                       <FontAwesomeIcon icon={isTerminalMaximized ? faWindowRestore : faWindowMaximize} className="text-xs" />
                     </button>
                     <button
                       onClick={() => setIsTerminalOpen(false)}
-                      className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                      title="Close Panel"
+                      className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
                     >
                       <FontAwesomeIcon icon={faTimes} className="text-xs" />
                     </button>
                   </div>
                 </div>
 
-                <div className="flex-1 w-full overflow-hidden">
-                  <XtermTerminal height={terminalHeight - 32} />
+                {/* Dock Body */}
+                <div className="flex-1 w-full overflow-hidden relative">
+                  {bottomDockTab === 'terminal' && (
+                    <div className="h-full w-full">
+                      <XtermTerminal height={terminalHeight - 32} />
+                    </div>
+                  )}
+                  {bottomDockTab === 'console' && (
+                    <div className="h-full w-full p-3 overflow-y-auto font-mono text-xs flex flex-col space-y-3 bg-slate-950">
+                      {/* Stdin input + Run Code Bar */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                          <FontAwesomeIcon icon={faKeyboard} className="text-brand-400" />
+                          <span>Standard Input (stdin)</span>
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleRunConsoleCode(currentWorkspace.customInput)}
+                            disabled={isExecuting}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] transition-colors flex items-center space-x-1 disabled:opacity-50 shadow"
+                          >
+                            <FontAwesomeIcon icon={faPlay} className="text-[9px]" />
+                            <span>{isExecuting ? 'Executing...' : 'Run with Input'}</span>
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        value={currentWorkspace.customInput}
+                        onChange={(e) => updateCurrentWorkspace({ customInput: e.target.value })}
+                        placeholder="Enter custom stdin lines here..."
+                        className="w-full h-16 p-2 bg-slate-900 border border-slate-800 rounded-lg text-tealAccent-300 font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-brand-500 resize-none shrink-0"
+                      />
+
+                      {/* Process Output Display */}
+                      <div className="flex-1 flex flex-col bg-slate-900/60 border border-slate-800 rounded-lg p-2.5 space-y-2 min-h-[100px]">
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Process Output</span>
+                          {currentWorkspace.executionOutput && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                              currentWorkspace.executionOutput.exitCode === 0 ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800' : 'bg-rose-950/80 text-rose-400 border border-rose-800'
+                            }`}>
+                              Exit {currentWorkspace.executionOutput.exitCode} • {currentWorkspace.executionOutput.timeMs}ms
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-1.5">
+                          {isExecuting ? (
+                            <div className="flex items-center space-x-2 text-brand-400 animate-pulse py-2">
+                              <div className="w-3.5 h-3.5 border-2 border-brand-400 border-t-transparent rounded-full animate-spin"></div>
+                              <span>Executing code in container sandbox...</span>
+                            </div>
+                          ) : currentWorkspace.executionOutput ? (
+                            <div className="space-y-1.5">
+                              {currentWorkspace.executionOutput.stdout && (
+                                <pre className="text-tealAccent-300 whitespace-pre-wrap bg-slate-950/80 p-2 rounded border border-slate-800 overflow-x-auto">
+                                  {currentWorkspace.executionOutput.stdout}
+                                </pre>
+                              )}
+                              {currentWorkspace.executionOutput.stderr && (
+                                <pre className="text-rose-400 whitespace-pre-wrap bg-rose-950/40 p-2 rounded border border-rose-900/50 overflow-x-auto">
+                                  {currentWorkspace.executionOutput.stderr}
+                                </pre>
+                              )}
+                              {currentWorkspace.executionOutput.compilationError && (
+                                <pre className="text-amber-400 whitespace-pre-wrap bg-amber-950/40 p-2 rounded border border-amber-900/50 overflow-x-auto">
+                                  {currentWorkspace.executionOutput.compilationError}
+                                </pre>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-slate-600 text-xs italic py-4 text-center">
+                              No active process output. Click &quot;Run&quot; or &quot;Run with Input&quot; to execute.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {bottomDockTab === 'logs' && (
+                    <div className="h-full w-full bg-slate-950 overflow-hidden flex flex-col">
+                      <LiveTestLogsView
+                        summary={testSummaries[currentTask.id] || null}
+                        isRunning={isTesting}
+                        passPercent={testSummaries[currentTask.id] && testSummaries[currentTask.id].totalCount > 0 ? Math.round((testSummaries[currentTask.id].passedCount / testSummaries[currentTask.id].totalCount) * 100) : 0}
+                        className="w-full h-full border-0"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}

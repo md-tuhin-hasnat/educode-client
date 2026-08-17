@@ -63,7 +63,11 @@ export default function TeacherNotificationsPage() {
       const res = await fetch(query);
       if (res.ok) {
         const json = await res.json();
-        setNotifications(json.data || []);
+        const rawData: NotificationItem[] = json.data || [];
+        const filtered = user?.id
+          ? rawData.filter((n) => !n.userId || n.userId === user.id)
+          : rawData.filter((n) => !n.userId);
+        setNotifications(filtered);
       }
     } catch (err) {
       console.error('Error fetching teacher notifications:', err);
@@ -83,10 +87,11 @@ export default function TeacherNotificationsPage() {
         const parsed = JSON.parse(event.data);
         if (parsed.type === 'NOTIFICATION' && parsed.payload) {
           const payload = parsed.payload;
-          // Filter if belongs to this teacher or global
-          if (!payload.userId || payload.userId === user?.id) {
-            setNotifications((prev) => [payload, ...prev]);
+          // Strictly ensure notification is either global (userId is null) OR matches this teacher
+          if (payload.userId && (!user?.id || payload.userId !== user.id)) {
+            return;
           }
+          setNotifications((prev) => [payload, ...prev.filter((n) => n.id !== payload.id)]);
         }
       } catch {
         // SSE Heartbeat

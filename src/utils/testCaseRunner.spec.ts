@@ -54,7 +54,7 @@ describe('testCaseRunner utility', () => {
       );
       expect(passRes.passed).toBe(true);
       expect(passRes.status).toBe('PASSED');
-      expect(passRes.logMessage).toBe('passed 1/3 (SAMPLE)');
+      expect(passRes.logMessage).toContain('Sample #1: Passed (AC)');
       expect(passRes.points).toBe(30);
 
       const failRes = await runSingleTestCase(
@@ -66,7 +66,7 @@ describe('testCaseRunner utility', () => {
       );
       expect(failRes.passed).toBe(false);
       expect(failRes.status).toBe('WRONG_ANSWER');
-      expect(failRes.logMessage).toBe('wrong answer on pretest 3');
+      expect(failRes.logMessage).toContain('Pretest #3: Wrong Answer (WA)');
       expect(failRes.points).toBe(0);
     });
 
@@ -90,11 +90,9 @@ describe('testCaseRunner utility', () => {
       expect(summary.earnedPoints).toBe(60);
       expect(summary.status).toBe('PARTIAL_PASSED');
 
-      expect(progressLogs).toEqual([
-        'passed 1/3 (SAMPLE)',
-        'passed 2/3 (SAMPLE)',
-        'wrong answer on pretest 3',
-      ]);
+      expect(progressLogs[0]).toContain('Sample #1: Passed (AC)');
+      expect(progressLogs[1]).toContain('Sample #2: Passed (AC)');
+      expect(progressLogs[2]).toContain('Pretest #3: Wrong Answer (WA)');
     });
   });
 });

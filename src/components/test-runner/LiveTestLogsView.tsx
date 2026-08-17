@@ -14,12 +14,14 @@ interface LiveTestLogsViewProps {
   summary: TestSuiteSummary | null;
   isRunning: boolean;
   passPercent: number;
+  className?: string;
 }
 
 export function LiveTestLogsView({
   summary,
   isRunning,
   passPercent,
+  className,
 }: LiveTestLogsViewProps) {
   const [copiedLog, setCopiedLog] = useState(false);
 
@@ -31,7 +33,7 @@ export function LiveTestLogsView({
   };
 
   return (
-    <div className="w-full md:w-80 border-r border-slate-800 bg-[#0f0f0f] flex flex-col shrink-0">
+    <div className={`bg-[#0f0f0f] flex flex-col ${className || 'w-full md:w-80 border-r border-slate-800 shrink-0'}`}>
       <div className="p-2.5 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between">
         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
           <FontAwesomeIcon icon={faTerminal} className="text-slate-500" />
@@ -52,12 +54,17 @@ export function LiveTestLogsView({
       <div className="flex-1 p-3 font-mono text-[11px] overflow-y-auto space-y-1.5">
         {summary?.logs && summary.logs.length > 0 ? (
           summary.logs.map((log, idx) => {
-            const isPass = log.includes('✅') || log.toLowerCase().startsWith('pass');
+            const isPass = log.includes('Passed') || log.includes('(AC)') || log.includes('✅');
             const isFail =
-              log.includes('❌') ||
-              log.toLowerCase().includes('wrong answer') ||
-              log.toLowerCase().includes('error') ||
-              log.toLowerCase().includes('time limit');
+              log.includes('Wrong Answer') ||
+              log.includes('(WA)') ||
+              log.includes('Time Limit') ||
+              log.includes('(TLE)') ||
+              log.includes('Runtime Error') ||
+              log.includes('(RTE)') ||
+              log.includes('Compilation Error') ||
+              log.includes('(CE)') ||
+              log.includes('❌');
             const isSummary = log.includes('🏁');
 
             return (
