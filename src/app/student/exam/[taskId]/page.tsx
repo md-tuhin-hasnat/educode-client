@@ -221,8 +221,9 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
   const lastKeyTimeRef = useRef<number>(0);
   const internalCopiedTextRef = useRef<string>('');
 
-  // Exam Countdown Timer (120 Mins = 7200s)
-  const [timeLeftSeconds, setTimeLeftSeconds] = useState<number>(7200);
+  // Exam Countdown Timer (null when untimed / single task)
+  const [timeLeftSeconds, setTimeLeftSeconds] = useState<number | null>(null);
+  const endTimeMsRef = useRef<number | null>(null);
 
   // Default Files Boilerplate Generator
   const getDefaultFilesForLanguage = useCallback((lang: string, templateCode?: string): WorkspaceFile[] => {
@@ -291,8 +292,23 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
             const sample = data.testCases.find((tc: any) => !tc.isHidden && tc.inputData);
             if (sample) setCustomInput(sample.inputData);
           }
-          if (data.examDurationMin) {
-            setTimeLeftSeconds(data.examDurationMin * 60);
+          if (data.isExam && (data.examDurationMin || data.assessment?.durationMin)) {
+            const durMin = Number(data.assessment?.durationMin || data.examDurationMin || 60);
+            const sessionStartTime = data.assessment?.startTime || data.startTime;
+
+            if (sessionStartTime) {
+              const startTimeMs = new Date(sessionStartTime).getTime();
+              const calculatedEndTime = startTimeMs + durMin * 60 * 1000;
+              endTimeMsRef.current = calculatedEndTime;
+              const remainingSec = Math.max(0, Math.floor((calculatedEndTime - Date.now()) / 1000));
+              setTimeLeftSeconds(remainingSec);
+            } else {
+              endTimeMsRef.current = Date.now() + durMin * 60 * 1000;
+              setTimeLeftSeconds(durMin * 60);
+            }
+          } else {
+            endTimeMsRef.current = null;
+            setTimeLeftSeconds(null);
           }
 
           // Workspace init with draft or task template
@@ -572,9 +588,9 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  // Initialize integrity proctoring engine session
+  // Initialize integrity proctoring engine session (only when taskData.isExam is true)
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.educode?.integrity) {
+    if (taskData && taskData.isExam && typeof window !== 'undefined' && window.educode?.integrity) {
       window.educode.integrity.startMonitoring(`submission-${params.taskId}-${Date.now()}`);
       setIsMonitoringActive(true);
 
@@ -590,8 +606,10 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
           window.educode.integrity.stopMonitoring();
         }
       };
+    } else {
+      setIsMonitoringActive(false);
     }
-  }, [params.taskId]);
+  }, [taskData, params.taskId]);
 
   // Clipboard & Keystroke telemetry tracking
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -629,13 +647,30 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
     });
   };
 
-  // Timer Countdown
+  const hasAutoSubmittedRef = useRef<boolean>(false);
+
+  // Timer Countdown (only runs when timeLeftSeconds is not null)
   useEffect(() => {
+    if (timeLeftSeconds === null) return;
+
+    if (timeLeftSeconds <= 0) {
+      if (!hasAutoSubmittedRef.current) {
+        hasAutoSubmittedRef.current = true;
+        handleSubmitExam(true);
+      }
+      return;
+    }
+
     const interval = setInterval(() => {
-      setTimeLeftSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+      if (endTimeMsRef.current !== null) {
+        const remaining = Math.max(0, Math.floor((endTimeMsRef.current - Date.now()) / 1000));
+        setTimeLeftSeconds(remaining);
+      } else {
+        setTimeLeftSeconds((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [timeLeftSeconds !== null, timeLeftSeconds === 0]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -643,6 +678,10 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
     const s = seconds % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
+
+  const isConcluded =
+    taskData?.assessment?.status === 'FINISHED' ||
+    (timeLeftSeconds !== null && timeLeftSeconds <= 0);
 
 
 
@@ -838,12 +877,12 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
     setTestCases((prev) => [...prev, tc]);
   };
 
-  const handleSubmitExam = async () => {
+  const handleSubmitExam = async (isForced = false) => {
     const isLocked =
       existingSubmission?.status === 'submitted' &&
       !existingSubmission?.allowResubmit;
 
-    if (isLocked) {
+    if (isLocked && !isForced) {
       alert(
         'You have already submitted this task. Only one submission is permitted unless your instructor grants re-submission access.',
       );
@@ -945,28 +984,31 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
 
         {/* Center / Status Indicators */}
         <div className="flex items-center space-x-2 shrink-0">
-          <div
-            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center space-x-1 border transition-all ${
-              isMonitoringActive
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-slate-800/80 border-slate-700 text-slate-400'
-            }`}
-          >
-            <FontAwesomeIcon icon={faShieldHalved} className={`text-[10px] ${isMonitoringActive ? 'animate-pulse' : ''}`} />
-            <span className="hidden xl:inline">{isMonitoringActive ? 'Proctoring' : 'Standby'}</span>
-          </div>
+          {/* Only show Proctoring indicator when task is proctored */}
+          {taskData?.isExam && (
+            <div className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold flex items-center space-x-1.5 border border-rose-500/30 bg-rose-500/10 text-rose-400 transition-all">
+              <FontAwesomeIcon
+                icon={faShieldHalved}
+                className={`text-[10px] ${isMonitoringActive ? 'animate-pulse' : ''}`}
+              />
+              <span className="hidden xl:inline">Proctored Session</span>
+            </div>
+          )}
 
-          {focusWarnings > 0 && (
+          {focusWarnings > 0 && taskData?.isExam && (
             <div className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold flex items-center space-x-1 animate-pulse">
               <FontAwesomeIcon icon={faExclamationTriangle} className="text-[10px]" />
               <span>{focusWarnings}</span>
             </div>
           )}
 
-          <div className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700/80 text-tealAccent-400 text-xs font-mono font-bold flex items-center space-x-1.5 shadow-inner">
-            <FontAwesomeIcon icon={faClock} className="text-[10px]" />
-            <span>{formatTime(timeLeftSeconds)}</span>
-          </div>
+          {/* Only show timer if timeLeftSeconds is set */}
+          {timeLeftSeconds !== null && (
+            <div className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700/80 text-tealAccent-400 text-xs font-mono font-bold flex items-center space-x-1.5 shadow-inner">
+              <FontAwesomeIcon icon={faClock} className="text-[10px]" />
+              <span>{formatTime(timeLeftSeconds)}</span>
+            </div>
+          )}
 
           {/* Draft Saved Indicator */}
           {lastSavedTime && (
@@ -1111,7 +1153,7 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
 
             return (
               <button
-                onClick={handleSubmitExam}
+                onClick={() => handleSubmitExam(false)}
                 disabled={isSubmitting || isLocked}
                 className={`px-3 py-1 h-7 rounded-md text-white text-xs font-bold shadow-md flex items-center space-x-1.5 transition-all ${
                   isLocked
@@ -1353,6 +1395,16 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
 
           {/* Editor + Terminal Workspace */}
           <div className="flex-1 flex flex-col min-w-0 bg-slate-950 relative overflow-hidden min-h-0">
+            {/* Concluded Session Alert Banner */}
+            {isConcluded && (
+              <div className="bg-rose-500/15 border-b border-rose-500/30 px-4 py-2 text-rose-300 text-xs font-bold flex items-center justify-between shrink-0">
+                <div className="flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faLock} />
+                  <span>Session Concluded — Solutions have been automatically submitted and locked.</span>
+                </div>
+              </div>
+            )}
+
             {/* Multi-Tab Bar & Language Control Overlay */}
             <div className="h-9 bg-[#111827] border-b border-slate-800 flex items-center justify-between shrink-0 select-none overflow-x-auto">
               {/* Active Tab Bar */}
@@ -1406,7 +1458,8 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
                   <select
                     value={language}
                     onChange={(e) => handleLanguageChange(e.target.value as 'cpp' | 'python' | 'java' | 'c')}
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-brand-500 font-semibold"
+                    disabled={isConcluded}
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-brand-500 font-semibold disabled:opacity-50"
                   >
                     <option value="cpp">C++ 20 (GCC)</option>
                     <option value="python">Python 3.10</option>
@@ -1417,7 +1470,8 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
                 {language === 'java' && (
                   <button
                     onClick={() => setIsJavaPackageModalOpen(true)}
-                    className="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 rounded text-[11px] font-semibold flex items-center space-x-1 transition-colors"
+                    disabled={isConcluded}
+                    className="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 rounded text-[11px] font-semibold flex items-center space-x-1 transition-colors disabled:opacity-50"
                     title="NetBeans Java Package Helper"
                   >
                     <FontAwesomeIcon icon={faFolderPlus} className="text-[10px]" />
@@ -1461,6 +1515,7 @@ export default function StudentExamPage({ params }: { params: { taskId: string }
                       scrollBeyondLastLine: false,
                       automaticLayout: true,
                       padding: { top: 12 },
+                      readOnly: isConcluded,
                     }}
                   />
                 </div>

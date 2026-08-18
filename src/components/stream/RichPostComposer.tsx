@@ -22,6 +22,8 @@ import {
   faSearch,
   faCalendarAlt,
   faAward,
+  faShieldAlt,
+  faUnlock,
 } from '@fortawesome/free-solid-svg-icons';
 
 export interface CodeBlockItem {
@@ -286,6 +288,18 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
+  // Handle live toggle for task integrity proctoring
+  const handleToggleTaskProctoring = async (taskId: string, isExam: boolean) => {
+    try {
+      setAvailableTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, isExam } : t))
+      );
+      await apiClient.patch(`/tasks/${taskId}`, { isExam });
+    } catch (err) {
+      console.error('Failed to update task proctoring setting:', err);
+    }
+  };
+
   // Handle Discard Private Draft
   const handleDiscardDraft = async () => {
     if (!confirm('Are you sure you want to discard this saved draft?')) return;
@@ -488,52 +502,109 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
               {selectedTaskId && (() => {
                 const attachedTask = availableTasks.find((t) => t.id === selectedTaskId);
                 return (
-                  <div className="p-4 bg-purple-950/40 border border-purple-500/40 rounded-2xl flex items-center justify-between shadow-lg shadow-purple-950/30 animate-fade-in">
-                    <div className="flex items-center space-x-3 overflow-hidden">
-                      <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold shrink-0">
-                        <FontAwesomeIcon icon={faLaptopCode} className="text-sm" />
-                      </div>
-                      <div className="truncate">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs font-extrabold text-white truncate">
-                            {attachedTask ? attachedTask.title : `Task (${selectedTaskId})`}
-                          </span>
-                          {attachedTask?.taskType && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
-                              {attachedTask.taskType}
-                            </span>
-                          )}
-                          {attachedTask?.language && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-teal-300 border border-slate-700 uppercase">
-                              {attachedTask.language}
-                            </span>
-                          )}
+                  <div className="p-4 bg-purple-950/40 border border-purple-500/40 rounded-2xl space-y-3 shadow-lg shadow-purple-950/30 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                        <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold shrink-0">
+                          <FontAwesomeIcon icon={faLaptopCode} className="text-sm" />
                         </div>
-                        <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-0.5">
-                          {attachedTask?.maxPoints !== undefined && (
-                            <span className="flex items-center space-x-1">
-                              <FontAwesomeIcon icon={faAward} className="text-amber-400 text-[10px]" />
-                              <span>{attachedTask.maxPoints} pts</span>
+                        <div className="truncate">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-extrabold text-white truncate">
+                              {attachedTask ? attachedTask.title : `Task (${selectedTaskId})`}
                             </span>
-                          )}
-                          {attachedTask?.deadline && (
-                            <span className="flex items-center space-x-1">
-                              <FontAwesomeIcon icon={faCalendarAlt} className="text-slate-500 text-[10px]" />
-                              <span>Due {new Date(attachedTask.deadline).toLocaleDateString()}</span>
-                            </span>
-                          )}
-                          <span className="text-[10px] text-purple-400 font-semibold">• Attached to this announcement</span>
+                            {attachedTask?.taskType && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
+                                {attachedTask.taskType}
+                              </span>
+                            )}
+                            {attachedTask?.language && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-teal-300 border border-slate-700 uppercase">
+                                {attachedTask.language}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-0.5">
+                            {attachedTask?.maxPoints !== undefined && (
+                              <span className="flex items-center space-x-1">
+                                <FontAwesomeIcon icon={faAward} className="text-amber-400 text-[10px]" />
+                                <span>{attachedTask.maxPoints} pts</span>
+                              </span>
+                            )}
+                            {attachedTask?.deadline && (
+                              <span className="flex items-center space-x-1">
+                                <FontAwesomeIcon icon={faCalendarAlt} className="text-slate-500 text-[10px]" />
+                                <span>Due {new Date(attachedTask.deadline).toLocaleDateString()}</span>
+                              </span>
+                            )}
+                            <span className="text-[10px] text-purple-400 font-semibold">• Attached to this announcement</span>
+                          </div>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTaskId(null)}
+                        className="w-8 h-8 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors shrink-0"
+                        title="Remove attached task"
+                      >
+                        <FontAwesomeIcon icon={faTimes} />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTaskId(null)}
-                      className="w-8 h-8 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors shrink-0"
-                      title="Remove attached task"
-                    >
-                      <FontAwesomeIcon icon={faTimes} />
-                    </button>
+
+                    {/* Academic Integrity & Proctoring Toggle Control */}
+                    <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center space-x-2.5">
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${
+                            attachedTask?.isExam
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                              : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                          }`}
+                        >
+                          <FontAwesomeIcon icon={attachedTask?.isExam ? faShieldAlt : faUnlock} />
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-slate-200">
+                              Academic Integrity Proctoring
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                attachedTask?.isExam
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+                              }`}
+                            >
+                              {attachedTask?.isExam ? 'PROCTORING ON' : 'PRACTICE MODE (OFF)'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            {attachedTask?.isExam
+                              ? 'Window focus loss & clipboard paste audits recorded during student solving session.'
+                              : 'Relaxed solving mode. No anti-cheat focus warnings or integrity locks.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          attachedTask &&
+                          handleToggleTaskProctoring(attachedTask.id, !attachedTask.isExam)
+                        }
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 shrink-0 ${
+                          attachedTask?.isExam
+                            ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/30'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
+                        }`}
+                      >
+                        <FontAwesomeIcon
+                          icon={attachedTask?.isExam ? faShieldAlt : faUnlock}
+                          className="text-[10px]"
+                        />
+                        <span>{attachedTask?.isExam ? 'Proctoring: ON' : 'Proctoring: OFF'}</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })()}
@@ -750,6 +821,19 @@ export const RichPostComposer: React.FC<RichPostComposerProps> = ({
                               {task.taskType && (
                                 <span className="uppercase text-[9px] text-slate-400">{task.taskType}</span>
                               )}
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[9px] font-bold border flex items-center space-x-1 ${
+                                  task.isExam
+                                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                    : 'bg-teal-500/10 text-teal-300 border-teal-500/20'
+                                }`}
+                              >
+                                <FontAwesomeIcon
+                                  icon={task.isExam ? faShieldAlt : faUnlock}
+                                  className="text-[8px]"
+                                />
+                                <span>{task.isExam ? 'Proctored' : 'Practice'}</span>
+                              </span>
                             </div>
                           </div>
                         </div>

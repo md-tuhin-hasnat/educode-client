@@ -1,6 +1,4 @@
-'use client';
-
-import React from 'react';
+import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faStream,
@@ -14,10 +12,14 @@ import {
   faAward,
   faCalendarAlt,
   faArrowRight,
+  faShieldAlt,
+  faUnlock,
 } from '@fortawesome/free-solid-svg-icons';
+import { apiClient } from '@/config/api';
 import { PostContentRenderer } from '@/components/stream/PostContentRenderer';
 import { StreamComments } from '@/components/stream/StreamComments';
 import { CodeBlockItem } from '@/components/stream/RichPostComposer';
+import { AssessmentSubmissionsModal } from '@/components/classroom/AssessmentSubmissionsModal';
 import { StreamPostItem, CourseTaskItem } from './types';
 
 interface ClassroomStreamTabProps {
@@ -45,6 +47,20 @@ export function ClassroomStreamTab({
   onRefreshCourse,
   mentionableUsers,
 }: ClassroomStreamTabProps) {
+  const [selectedTaskForSubmissions, setSelectedTaskForSubmissions] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+
+  const handleToggleStreamTaskProctoring = async (taskId: string, isExam: boolean) => {
+    try {
+      await apiClient.patch(`/tasks/${taskId}`, { isExam });
+      onRefreshCourse();
+    } catch (err) {
+      console.error('Failed to toggle proctoring for task:', err);
+    }
+  };
+
   // Helper to parse multiple code blocks from post snippet field
   const parseCodeBlocks = (post: StreamPostItem): CodeBlockItem[] => {
     if (!post.codeSnippet || !post.codeSnippet.trim()) return [];
@@ -223,22 +239,62 @@ export function ClassroomStreamTab({
                               <span>Due {new Date(attachedTask.deadline).toLocaleString()}</span>
                             </span>
                           )}
-                          {attachedTask.isExam && (
-                            <span className="text-rose-400 font-bold">• Timed Examination</span>
-                          )}
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center space-x-1 ${
+                              attachedTask.isExam
+                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                : 'bg-teal-500/10 text-teal-300 border-teal-500/20'
+                            }`}
+                          >
+                            <FontAwesomeIcon
+                              icon={attachedTask.isExam ? faShieldAlt : faUnlock}
+                              className="text-[9px]"
+                            />
+                            <span>{attachedTask.isExam ? 'Proctored Exam' : 'Practice Problem'}</span>
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="shrink-0 flex items-center space-x-2 w-full sm:w-auto">
+                    <div className="shrink-0 flex flex-wrap items-center gap-2 w-full sm:w-auto">
                       {isTeacherOrAdmin ? (
-                        <a
-                          href={`/teacher/submissions`}
-                          className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all shadow-md"
-                        >
-                          <span>View Submissions</span>
-                          <FontAwesomeIcon icon={faExternalLinkAlt} className="text-[10px]" />
-                        </a>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleToggleStreamTaskProctoring(
+                                attachedTask.id,
+                                !attachedTask.isExam,
+                              )
+                            }
+                            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm active:scale-95 ${
+                              attachedTask.isExam
+                                ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                            }`}
+                            title="Toggle academic integrity proctoring for this post task"
+                          >
+                            <FontAwesomeIcon
+                              icon={attachedTask.isExam ? faShieldAlt : faUnlock}
+                              className="text-[10px]"
+                            />
+                            <span>{attachedTask.isExam ? 'Proctoring: ON' : 'Proctoring: OFF'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedTaskForSubmissions({
+                                id: attachedTask.id,
+                                title: attachedTask.title,
+                              })
+                            }
+                            className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-teal-300 hover:text-teal-200 border border-slate-700 hover:border-teal-500/40 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all shadow-md active:scale-95"
+                          >
+                            <span>View Submissions</span>
+                            <FontAwesomeIcon icon={faExternalLinkAlt} className="text-[10px]" />
+                          </button>
+                        </>
                       ) : (
                         <a
                           href={`/student/exam/${attachedTask.id}`}
@@ -300,6 +356,16 @@ export function ClassroomStreamTab({
             );
           })}
         </div>
+      )}
+
+      {selectedTaskForSubmissions && (
+        <AssessmentSubmissionsModal
+          isOpen={!!selectedTaskForSubmissions}
+          onClose={() => setSelectedTaskForSubmissions(null)}
+          taskId={selectedTaskForSubmissions.id}
+          assessmentTitle={`Post Task: ${selectedTaskForSubmissions.title}`}
+          assessmentType="POST"
+        />
       )}
     </div>
   );

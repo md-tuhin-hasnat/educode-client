@@ -282,13 +282,45 @@ export default function StudentSolvePage() {
         // ignore
       }
 
-      // Calculate time left
-      if (data.startTime && data.durationMin) {
+      // Select requested task if query param provided
+      const queryTaskId = searchParams?.get('taskId');
+      const queryTaskIdx = searchParams?.get('taskIndex');
+      if (queryTaskId && Array.isArray(data.tasks)) {
+        const foundIdx = data.tasks.findIndex((t: any) => t.id === queryTaskId);
+        if (foundIdx >= 0) setCurrentTaskIndex(foundIdx);
+      } else if (queryTaskIdx !== null && queryTaskIdx !== undefined && Array.isArray(data.tasks)) {
+        const parsedIdx = parseInt(queryTaskIdx, 10);
+        if (!isNaN(parsedIdx) && parsedIdx >= 0 && parsedIdx < data.tasks.length) {
+          setCurrentTaskIndex(parsedIdx);
+        }
+      }
+
+      // Check session finished vs running vs extra time
+      if (data.status === 'FINISHED') {
+        endTimeMsRef.current = null;
+        setTimeLeft(0);
+        if (!hasAutoSubmittedRef.current) {
+          handleAutoSubmitAllTasks(true);
+        }
+      } else if (data.status === 'RUNNING' && data.startTime && data.durationMin) {
         const start = new Date(data.startTime).getTime();
-        const end = start + data.durationMin * 60 * 1000;
+        const end = start + Number(data.durationMin) * 60 * 1000;
+        endTimeMsRef.current = end;
         const now = Date.now();
         const diff = Math.max(0, Math.floor((end - now) / 1000));
         setTimeLeft(diff);
+        if (diff > 0) {
+          hasAutoSubmittedRef.current = false; // Reset flag if session was re-opened or extra time added
+        }
+      } else if (data.durationMin && data.durationMin > 0 && data.type === 'LAB') {
+        if (!endTimeMsRef.current) {
+          const durSeconds = Number(data.durationMin) * 60;
+          endTimeMsRef.current = Date.now() + durSeconds * 1000;
+          setTimeLeft(durSeconds);
+        }
+      } else {
+        endTimeMsRef.current = null;
+        setTimeLeft(null);
       }
     } catch (err: any) {
       setError(err.message);
@@ -300,6 +332,8 @@ export default function StudentSolvePage() {
   useEffect(() => {
     if (user?.token && id) {
       fetchAssessment();
+      const interval = setInterval(fetchAssessment, 3000);
+      return () => clearInterval(interval);
     }
   }, [user, id]);
 
@@ -362,21 +396,90 @@ export default function StudentSolvePage() {
   const [lastWarningReason, setLastWarningReason] = useState<string>('');
   const lastKeyTimeRef = useRef<number>(0);
   const internalCopiedTextRef = useRef<string>('');
+  const endTimeMsRef = useRef<number | null>(null);
+  const hasAutoSubmittedRef = useRef<boolean>(false);
+
+  const handleAutoSubmitAllTasks = async (isTimeUp = false) => {
+    if (!user?.token || !assessment?.tasks || assessment.tasks.length === 0) return;
+    if (hasAutoSubmittedRef.current) return;
+    hasAutoSubmittedRef.current = true;
+
+    setIsSubmitting(true);
+    try {
+      for (const task of assessment.tasks) {
+        const ws = workspaces[task.id];
+        const sourceCode =
+          ws?.code ||
+          ws?.workspaceFiles?.[0]?.content ||
+          task.templateCode ||
+          '// Final solution auto-submitted upon session conclusion';
+        const lang = (ws?.language || task.language || 'cpp').toUpperCase();
+
+        try {
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/submissions`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${user.token}`,
+              },
+              body: JSON.stringify({
+                taskId: task.id,
+                sourceCode,
+                language: lang,
+              }),
+            },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            setTaskSubmissions((prev) => ({
+              ...prev,
+              [task.id]: {
+                id: data.id || 'sub-auto',
+                status: 'submitted',
+                allowResubmit: false,
+                attemptCount: 1,
+                submittedAt: new Date().toISOString(),
+              },
+            }));
+          }
+        } catch (taskErr) {
+          console.error(`Auto-submit error for task ${task.id}:`, taskErr);
+        }
+      }
+
+      if (isTimeUp) {
+        alert('Assessment session time has expired. All your solutions have been automatically submitted.');
+      }
+    } catch (err: any) {
+      console.error('Auto-submitting tasks failed:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (timeLeft === null) return;
     
     if (timeLeft <= 0) {
-      handleSubmitExam(); // Auto-submit when time is up
+      if (!hasAutoSubmittedRef.current) {
+        handleAutoSubmitAllTasks(true); // Auto-submit all tasks when time is up
+      }
       return;
     }
 
     const timer = setInterval(() => {
-      setTimeLeft(prev => (prev && prev > 0 ? prev - 1 : 0));
+      if (endTimeMsRef.current !== null) {
+        const remaining = Math.max(0, Math.floor((endTimeMsRef.current - Date.now()) / 1000));
+        setTimeLeft(remaining);
+      } else {
+        setTimeLeft((prev) => (prev && prev > 0 ? prev - 1 : 0));
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [timeLeft === null, timeLeft === 0]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -387,6 +490,7 @@ export default function StudentSolvePage() {
   };
 
   const currentTask = assessment?.tasks?.[currentTaskIndex];
+  const isConcluded = assessment?.status === 'FINISHED' || (timeLeft !== null && timeLeft <= 0);
   const isLastTask = assessment?.tasks
     ? currentTaskIndex === assessment.tasks.length - 1
     : false;
@@ -708,9 +812,15 @@ export default function StudentSolvePage() {
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // Initialize integrity proctoring for the entire assessment session
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).educode?.integrity && currentTask) {
-      (window as any).educode.integrity.startMonitoring(`submission-${currentTask.id}-${Date.now()}`);
+    if (
+      typeof window !== 'undefined' &&
+      (window as any).educode?.integrity &&
+      assessment &&
+      (assessment.type === 'EXAM' || assessment.type === 'LAB')
+    ) {
+      (window as any).educode.integrity.startMonitoring(`assessment-${assessment.id}-${Date.now()}`);
       setIsMonitoringActive(true);
 
       const cleanup = (window as any).educode.integrity.onFocusLost((data: any) => {
@@ -725,8 +835,10 @@ export default function StudentSolvePage() {
           (window as any).educode.integrity.stopMonitoring();
         }
       };
+    } else {
+      setIsMonitoringActive(false);
     }
-  }, [currentTask?.id]);
+  }, [assessment?.id, assessment?.type]);
 
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const now = Date.now();
@@ -1013,25 +1125,36 @@ export default function StudentSolvePage() {
 
         {/* Center / Status Indicators */}
         <div className="flex items-center space-x-2 shrink-0">
-          <div
-            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center space-x-1 border transition-all ${
-              isMonitoringActive
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-slate-800/80 border-slate-700 text-slate-400'
-            }`}
-          >
-            <FontAwesomeIcon icon={faShieldHalved} className={`text-[10px] ${isMonitoringActive ? 'animate-pulse' : ''}`} />
-            <span className="hidden xl:inline">{isMonitoringActive ? 'Proctoring' : 'Standby'}</span>
-          </div>
+          {/* Only show Proctoring indicator when proctoring is actively running */}
+          {isMonitoringActive && (
+            <div className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold flex items-center space-x-1.5 border border-rose-500/30 bg-rose-500/10 text-rose-400 transition-all">
+              <FontAwesomeIcon
+                icon={faShieldHalved}
+                className="text-[10px] animate-pulse"
+              />
+              <span className="hidden xl:inline">Proctored Session</span>
+            </div>
+          )}
 
-          <div className={`px-2.5 py-1 rounded-md border text-xs font-mono font-bold flex items-center space-x-1.5 shadow-inner ${
-             timeLeft !== null && timeLeft < 300 
-               ? 'bg-red-500/20 text-red-400 border-red-500/30 animate-pulse' 
-               : 'bg-slate-900 border-slate-700/80 text-tealAccent-400'
-          }`}>
-            <FontAwesomeIcon icon={faClock} className="text-[10px]" />
-            <span>{timeLeft !== null ? formatTime(timeLeft) : 'Unlimited'}</span>
-          </div>
+          {focusWarnings > 0 && isMonitoringActive && (
+            <div className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold flex items-center space-x-1 animate-pulse">
+              <FontAwesomeIcon icon={faExclamationTriangle} className="text-[10px]" />
+              <span>{focusWarnings}</span>
+            </div>
+          )}
+
+          {timeLeft !== null && (
+            <div
+              className={`px-2.5 py-1 rounded-md border text-xs font-mono font-bold flex items-center space-x-1.5 shadow-inner ${
+                timeLeft < 300
+                  ? 'bg-red-500/20 text-red-400 border-red-500/30 animate-pulse'
+                  : 'bg-slate-900 border-slate-700/80 text-tealAccent-400'
+              }`}
+            >
+              <FontAwesomeIcon icon={faClock} className="text-[10px]" />
+              <span>{formatTime(timeLeft)}</span>
+            </div>
+          )}
 
           {/* Draft Saved Indicator */}
           {lastSavedTime && (
@@ -1360,6 +1483,82 @@ export default function StudentSolvePage() {
                       <p className="text-slate-500 italic text-xs">No description provided for this task.</p>
                     )}
                   </div>
+
+                  {/* Sample Test Cases & Examples Section */}
+                  {(() => {
+                    const sampleCases = Array.isArray(currentTask.testCases)
+                      ? currentTask.testCases.filter((tc: any) => !tc.isHidden || tc.testType === 'SAMPLE')
+                      : [];
+
+                    if (sampleCases.length === 0) return null;
+
+                    return (
+                      <div className="not-prose space-y-4 pt-5 border-t border-slate-800/80">
+                        <div className="flex items-center space-x-2">
+                          <FontAwesomeIcon icon={faVial} className="text-teal-400 text-xs" />
+                          <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                            Sample Test Cases & Examples ({sampleCases.length})
+                          </h4>
+                        </div>
+
+                        <div className="space-y-4">
+                          {sampleCases.map((tc: any, idx: number) => (
+                            <div
+                              key={tc.id || idx}
+                              className="p-4 bg-slate-950/90 rounded-2xl border border-slate-800/90 space-y-3 shadow-md"
+                            >
+                              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                                <span className="flex items-center space-x-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+                                  <span>Sample #{idx + 1}</span>
+                                </span>
+                                {tc.points ? (
+                                  <span className="text-teal-400 font-mono text-[11px]">({tc.points} pts)</span>
+                                ) : null}
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Sample Input */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-slate-400 text-[10px] uppercase tracking-wider">
+                                      Sample Input
+                                    </span>
+                                  </div>
+                                  <pre className="p-3 bg-slate-900/90 rounded-xl font-mono text-[11px] text-teal-300 overflow-x-auto border border-slate-800/80 whitespace-pre-wrap select-text">
+                                    {tc.inputData !== undefined && tc.inputData !== null && tc.inputData !== ''
+                                      ? tc.inputData
+                                      : '(No Input / Empty)'}
+                                  </pre>
+                                </div>
+
+                                {/* Expected Output */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-slate-400 text-[10px] uppercase tracking-wider">
+                                      Expected Output
+                                    </span>
+                                  </div>
+                                  <pre className="p-3 bg-slate-900/90 rounded-xl font-mono text-[11px] text-emerald-300 overflow-x-auto border border-slate-800/80 whitespace-pre-wrap select-text">
+                                    {tc.expectedOutput !== undefined && tc.expectedOutput !== null && tc.expectedOutput !== ''
+                                      ? tc.expectedOutput
+                                      : '(No Output / Empty)'}
+                                  </pre>
+                                </div>
+                              </div>
+
+                              {tc.explanation && (
+                                <div className="p-2.5 rounded-xl bg-slate-900/50 border border-slate-800/60 text-[11px] text-slate-300">
+                                  <span className="font-bold text-teal-400">Explanation: </span>
+                                  <span>{tc.explanation}</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -1402,6 +1601,16 @@ export default function StudentSolvePage() {
           />
 
           <div className="flex-1 flex flex-col min-w-0 bg-slate-950 relative overflow-hidden min-h-0">
+            {/* Concluded Session Alert Banner */}
+            {isConcluded && (
+              <div className="bg-rose-500/15 border-b border-rose-500/30 px-4 py-2 text-rose-300 text-xs font-bold flex items-center justify-between shrink-0">
+                <div className="flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faLock} />
+                  <span>Session Concluded — Solutions have been automatically submitted and locked. If your instructor adds extra time, live editing will re-open automatically.</span>
+                </div>
+              </div>
+            )}
+
             <div className="h-9 bg-[#111827] border-b border-slate-800 flex items-center justify-between shrink-0 select-none overflow-x-auto">
               <div className="flex items-center h-full overflow-x-auto no-scrollbar">
                 {currentWorkspace.openTabPaths.map((filePath) => {
@@ -1452,7 +1661,8 @@ export default function StudentSolvePage() {
                   <select
                     value={currentWorkspace.language}
                     onChange={(e) => handleLanguageChange(e.target.value as 'cpp' | 'python' | 'java' | 'c')}
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    disabled={isConcluded}
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                   >
                     {(!currentTask.allowedLanguage || currentTask.allowedLanguage === 'Any' || currentTask.allowedLanguage.toLowerCase() === 'cpp' || currentTask.allowedLanguage.toLowerCase() === 'c++') && <option value="cpp">C++</option>}
                     {(!currentTask.allowedLanguage || currentTask.allowedLanguage === 'Any' || currentTask.allowedLanguage.toLowerCase() === 'python') && <option value="python">Python</option>}
@@ -1463,7 +1673,8 @@ export default function StudentSolvePage() {
                 {currentWorkspace.language === 'java' && (
                   <button
                     onClick={() => setIsJavaPackageModalOpen(true)}
-                    className="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 rounded text-[11px] flex items-center space-x-1 transition-colors"
+                    disabled={isConcluded}
+                    className="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 rounded text-[11px] flex items-center space-x-1 transition-colors disabled:opacity-50"
                   >
                     <FontAwesomeIcon icon={faFolderPlus} className="text-[10px]" />
                     <span>Package Wizard</span>
@@ -1503,6 +1714,7 @@ export default function StudentSolvePage() {
                     scrollBeyondLastLine: false,
                     automaticLayout: true,
                     padding: { top: 12 },
+                    readOnly: isConcluded,
                   }}
                 />
               </div>

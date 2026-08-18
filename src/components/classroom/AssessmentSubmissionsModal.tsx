@@ -26,6 +26,9 @@ import {
   faCopy,
   faCheck,
   faChevronRight,
+  faChevronDown,
+  faChevronLeft,
+  faListCheck,
   faLaptopCode,
   faEye,
   faGraduationCap,
@@ -130,15 +133,17 @@ export interface AssessmentSubmissionsData {
 interface AssessmentSubmissionsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  assessmentId: string;
+  assessmentId?: string;
+  taskId?: string;
   assessmentTitle?: string;
-  assessmentType?: 'LAB' | 'ASSIGNMENT' | 'EXAM' | string;
+  assessmentType?: 'LAB' | 'ASSIGNMENT' | 'EXAM' | 'POST' | string;
 }
 
 export function AssessmentSubmissionsModal({
   isOpen,
   onClose,
   assessmentId,
+  taskId,
   assessmentTitle,
   assessmentType = 'LAB',
 }: AssessmentSubmissionsModalProps) {
@@ -157,6 +162,9 @@ export function AssessmentSubmissionsModal({
   // Active sub-tab inside student dossier: 'code' | 'tests' | 'integrity'
   const [dossierSubTab, setDossierSubTab] = useState<'code' | 'tests' | 'integrity'>('code');
 
+  // Problem dropdown switcher popover state
+  const [isProblemDropdownOpen, setIsProblemDropdownOpen] = useState<boolean>(false);
+
   // Test Runner state for teacher evaluating student code
   const [isEvaluatingTests, setIsEvaluatingTests] = useState<boolean>(false);
   const [evalTestSummary, setEvalTestSummary] = useState<{
@@ -171,14 +179,18 @@ export function AssessmentSubmissionsModal({
   // Re-submission toggle loading tracker: taskId_studentId -> boolean
   const [updatingResubmit, setUpdatingResubmit] = useState<{ [key: string]: boolean }>({});
 
+  const targetId = assessmentId || taskId;
+  const isSingleTask = Boolean(taskId && !assessmentId);
+
   const fetchSubmissions = useCallback(async () => {
-    if (!assessmentId) return;
+    if (!targetId) return;
     try {
       setIsLoading(true);
       setError(null);
-      const res = await apiClient.get<AssessmentSubmissionsData>(
-        `/assessments/${assessmentId}/submissions`,
-      );
+      const endpoint = isSingleTask
+        ? `/tasks/${targetId}/submissions`
+        : `/assessments/${targetId}/submissions`;
+      const res = await apiClient.get<AssessmentSubmissionsData>(endpoint);
       setData(res.data);
       if (res.data.students.length > 0 && !selectedStudentId) {
         setSelectedStudentId(res.data.students[0].student.id);
@@ -186,18 +198,18 @@ export function AssessmentSubmissionsModal({
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message || 'Failed to load assessment submissions';
+          ?.message || 'Failed to load submissions dossier';
       setError(msg);
     } finally {
       setIsLoading(false);
     }
-  }, [assessmentId, selectedStudentId]);
+  }, [targetId, isSingleTask, selectedStudentId]);
 
   useEffect(() => {
-    if (isOpen && assessmentId) {
+    if (isOpen && targetId) {
       fetchSubmissions();
     }
-  }, [isOpen, assessmentId, fetchSubmissions]);
+  }, [isOpen, targetId, fetchSubmissions]);
 
   // Set default student selection once loaded
   useEffect(() => {
@@ -911,45 +923,147 @@ export function AssessmentSubmissionsModal({
                   </div>
                 </div>
 
-                {/* Problem Task Document Tabs (File-Like Tabs) */}
-                <div className="px-4 pt-2.5 border-b border-slate-800 bg-[#0a0f1d] flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar gap-2">
-                  <div className="flex items-center space-x-1.5">
-                    {activeStudentGroup.taskSubmissions.map((ts, idx) => {
-                      const isTabActive = idx === selectedTaskIndex;
-                      const isSub = ts.status === 'submitted' || ts.status === 'graded';
-                      const ext = (ts.language || 'cpp').toLowerCase() === 'python' ? 'py' : (ts.language || 'cpp').toLowerCase() === 'java' ? 'java' : 'cpp';
-
-                      return (
-                        <button
-                          key={ts.taskId}
-                          onClick={() => setSelectedTaskIndex(idx)}
-                          className={`px-3.5 py-2 rounded-t-xl text-xs font-medium border-t border-x flex items-center space-x-2 transition-all ${
-                            isTabActive
-                              ? 'bg-[#0e1424] border-slate-700 text-white font-bold shadow-sm'
-                              : 'bg-slate-900/40 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/80'
-                          }`}
-                        >
+                {/* Problem Dossier Navigation Bar (Never crowded for 1, 5, or 20+ problems) */}
+                <div className="px-4 py-2.5 border-b border-slate-800 bg-[#0a0f1d] flex items-center justify-between shrink-0 gap-3">
+                  <div className="flex items-center space-x-2.5 relative flex-1 min-w-0">
+                    {/* Problem Selector Dropdown Button */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setIsProblemDropdownOpen((prev) => !prev)}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#0e1424] hover:bg-[#131b30] border border-slate-700/80 hover:border-slate-600 flex items-center space-x-2.5 text-xs font-bold text-white transition-all shadow-sm group"
+                      >
+                        <div className="w-5 h-5 rounded-md bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-[10px] font-mono font-black text-teal-300">
+                          #{selectedTaskIndex + 1}
+                        </div>
+                        <FontAwesomeIcon icon={faFileCode} className="text-teal-400 text-xs" />
+                        <span className="truncate max-w-[160px] sm:max-w-[260px]">
+                          {activeTaskSubmission?.taskTitle}.{(activeTaskSubmission?.language || 'cpp').toLowerCase() === 'python' ? 'py' : (activeTaskSubmission?.language || 'cpp').toLowerCase() === 'java' ? 'java' : 'cpp'}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          {activeTaskSubmission?.score ?? 0}/{activeTaskSubmission?.maxPoints || 100}p
+                        </span>
+                        {activeStudentGroup.taskSubmissions.length > 1 && (
                           <FontAwesomeIcon
-                            icon={faFileCode}
-                            className={`text-xs ${
-                              isSub ? 'text-teal-400' : 'text-slate-500'
+                            icon={faChevronDown}
+                            className={`text-[10px] text-slate-400 group-hover:text-white transition-transform ${
+                              isProblemDropdownOpen ? 'rotate-180' : ''
                             }`}
                           />
-                          <span className="truncate max-w-[140px] sm:max-w-[200px]">
-                            {ts.taskTitle}.{ext}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold ${
-                              isSub
-                                ? 'bg-emerald-500/20 text-emerald-300'
-                                : 'bg-slate-800 text-slate-500'
-                            }`}
-                          >
-                            {isSub ? `${ts.score ?? ts.maxPoints}p` : '0p'}
-                          </span>
+                        )}
+                      </button>
+
+                      {/* Dropdown Menu when clicked */}
+                      {isProblemDropdownOpen && activeStudentGroup.taskSubmissions.length > 1 && (
+                        <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 bg-[#0f172a] border border-slate-700 rounded-2xl shadow-2xl p-2 z-50 animate-fadeIn space-y-1 max-h-80 overflow-y-auto">
+                          <div className="px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center justify-between border-b border-slate-800 mb-1">
+                            <span>Select Problem ({activeStudentGroup.taskSubmissions.length})</span>
+                            <span>Score</span>
+                          </div>
+                          {activeStudentGroup.taskSubmissions.map((ts, idx) => {
+                            const isCur = idx === selectedTaskIndex;
+                            const isSub = ts.status === 'submitted' || ts.status === 'graded';
+                            const pExt = (ts.language || 'cpp').toLowerCase() === 'python' ? 'py' : (ts.language || 'cpp').toLowerCase() === 'java' ? 'java' : 'cpp';
+                            return (
+                              <button
+                                key={ts.taskId}
+                                onClick={() => {
+                                  setSelectedTaskIndex(idx);
+                                  setIsProblemDropdownOpen(false);
+                                }}
+                                className={`w-full p-2 rounded-xl text-left flex items-center justify-between transition-all ${
+                                  isCur
+                                    ? 'bg-teal-500/20 border border-teal-500/40 text-white'
+                                    : 'hover:bg-slate-800/80 text-slate-300 border border-transparent'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-2.5 min-w-0">
+                                  <span className="w-5 h-5 rounded bg-slate-800 text-teal-400 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                    #{idx + 1}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold truncate text-white">
+                                      {ts.taskTitle}.{pExt}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">
+                                      {isSub ? `Submitted • Attempt #${ts.attemptCount}` : 'Not Submitted'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                      isSub
+                                        ? 'bg-emerald-500/20 text-emerald-300'
+                                        : 'bg-slate-800 text-slate-500'
+                                    }`}
+                                  >
+                                    {ts.score ?? 0} / {ts.maxPoints}p
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step Navigation Controls for Multiple Problems */}
+                    {activeStudentGroup.taskSubmissions.length > 1 && (
+                      <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5">
+                        <button
+                          onClick={() => setSelectedTaskIndex((prev) => Math.max(0, prev - 1))}
+                          disabled={selectedTaskIndex === 0}
+                          className="px-2 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs"
+                          title="Previous Problem"
+                        >
+                          <FontAwesomeIcon icon={faChevronLeft} className="text-[10px]" />
                         </button>
-                      );
-                    })}
+                        <span className="px-2 text-[10px] font-mono font-bold text-slate-400">
+                          {selectedTaskIndex + 1} / {activeStudentGroup.taskSubmissions.length}
+                        </span>
+                        <button
+                          onClick={() =>
+                            setSelectedTaskIndex((prev) =>
+                              Math.min(activeStudentGroup.taskSubmissions.length - 1, prev + 1),
+                            )
+                          }
+                          disabled={
+                            selectedTaskIndex === activeStudentGroup.taskSubmissions.length - 1
+                          }
+                          className="px-2 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs"
+                          title="Next Problem"
+                        >
+                          <FontAwesomeIcon icon={faChevronRight} className="text-[10px]" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Quick direct jumping chips if 2 to 5 problems */}
+                    {activeStudentGroup.taskSubmissions.length > 1 &&
+                      activeStudentGroup.taskSubmissions.length <= 5 && (
+                        <div className="hidden md:flex items-center space-x-1">
+                          {activeStudentGroup.taskSubmissions.map((ts, idx) => {
+                            const isCur = idx === selectedTaskIndex;
+                            const isSub = ts.status === 'submitted' || ts.status === 'graded';
+                            return (
+                              <button
+                                key={ts.taskId}
+                                onClick={() => setSelectedTaskIndex(idx)}
+                                className={`w-7 h-7 rounded-lg text-xs font-mono font-bold flex items-center justify-center transition-all ${
+                                  isCur
+                                    ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+                                    : isSub
+                                    ? 'bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30'
+                                    : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+                                }`}
+                                title={`${ts.taskTitle} (${ts.score ?? 0}/${ts.maxPoints} pts)`}
+                              >
+                                P{idx + 1}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                   </div>
 
                   {/* Re-submission control for active task */}
@@ -962,8 +1076,12 @@ export function AssessmentSubmissionsModal({
                           activeTaskSubmission.allowResubmit,
                         )
                       }
-                      disabled={updatingResubmit[`${activeTaskSubmission.taskId}_${activeStudentGroup.student.id}`]}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border flex items-center space-x-1.5 transition-all mb-1 ${
+                      disabled={
+                        updatingResubmit[
+                          `${activeTaskSubmission.taskId}_${activeStudentGroup.student.id}`
+                        ]
+                      }
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center space-x-1.5 transition-all shrink-0 ${
                         activeTaskSubmission.allowResubmit
                           ? 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
                           : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/30'
@@ -971,14 +1089,18 @@ export function AssessmentSubmissionsModal({
                     >
                       <FontAwesomeIcon
                         icon={
-                          updatingResubmit[`${activeTaskSubmission.taskId}_${activeStudentGroup.student.id}`]
+                          updatingResubmit[
+                            `${activeTaskSubmission.taskId}_${activeStudentGroup.student.id}`
+                          ]
                             ? faSpinner
                             : activeTaskSubmission.allowResubmit
                             ? faLock
                             : faUnlock
                         }
-                        className={`text-[9px] ${
-                          updatingResubmit[`${activeTaskSubmission.taskId}_${activeStudentGroup.student.id}`]
+                        className={`text-[10px] ${
+                          updatingResubmit[
+                            `${activeTaskSubmission.taskId}_${activeStudentGroup.student.id}`
+                          ]
                             ? 'animate-spin'
                             : ''
                         }`}
